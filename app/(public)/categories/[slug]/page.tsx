@@ -65,7 +65,8 @@ async function fetchData(slugOrId: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default async function CategoryPage({ params }: any) {
+export default async function CategoryPage(props: any) {
+    const params = await props.params;
     const { category, products, priceMap, descendantCount, ancestors } = await fetchData(params.slug) as any;
     if (!category) notFound();
 

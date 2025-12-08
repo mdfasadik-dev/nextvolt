@@ -108,7 +108,8 @@ async function fetchProduct(idOrSlug: string) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default async function ProductDetailPage({ params }: any) {
+export default async function ProductDetailPage(props: any) {
+    const params = await props.params;
     const data = await fetchProduct(params.id);
     if (!data) notFound();
     const { product, category, ancestors, price, attributes, variants, baseQty, baseUnit } = data as any;
