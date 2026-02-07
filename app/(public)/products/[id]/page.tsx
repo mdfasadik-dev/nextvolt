@@ -9,10 +9,10 @@ import { StoreService } from '@/lib/services/storeService';
 async function fetchProduct(idOrSlug: string) {
     const supabase = await createClient();
     // Try by slug first then id
-    const { data: bySlug } = await supabase.from('products').select('*').eq('slug', idOrSlug).maybeSingle();
+    const { data: bySlug } = await supabase.from('products').select('*').eq('slug', idOrSlug).eq('is_active', true).maybeSingle();
     let product: any = bySlug;
     if (!product) {
-        const { data: byId } = await supabase.from('products').select('*').eq('id', idOrSlug).maybeSingle();
+        const { data: byId } = await supabase.from('products').select('*').eq('id', idOrSlug).eq('is_active', true).maybeSingle();
         product = byId;
     }
     if (!product) return null;

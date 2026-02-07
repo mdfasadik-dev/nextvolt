@@ -10,8 +10,8 @@ import { ProductSearchBar } from "@/components/search/product-search-bar";
 export async function PublicNav() {
     const store = await StoreService.getFirst();
     return (
-        <div className="sticky top-0 z-50 w-full">
-            <nav className="relative z-20 w-full flex justify-center border-b border-b-foreground/10 h-16 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="sticky top-0 z-50 w-full bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/70 border-b border-foreground/10 md:border-none">
+            <nav className="relative z-20 w-full flex justify-center h-16 md:border-b md:border-foreground/10">
                 <div className="w-full max-w-6xl flex items-center gap-4 px-4 text-sm">
                     <div className="flex items-center gap-4 font-semibold shrink-0">
                         <CategoryMenu />
@@ -33,6 +33,9 @@ export async function PublicNav() {
                     </div>
                 </div>
             </nav>
+            <div className="w-full md:hidden px-4 pb-3 flex justify-center">
+                <ProductSearchBar className="w-full" />
+            </div>
             <CategoryTopBar />
         </div>
     );

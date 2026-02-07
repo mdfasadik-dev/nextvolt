@@ -29,7 +29,7 @@ async function fetchData(slugOrId: string) {
     while (pid) { const p = map.get(pid); if (!p) break; ancestorsRev.push(p); pid = p.parent_id; }
     const ancestors = ancestorsRev.reverse();
     const ids = [category.id, ...descendants];
-    const { data: products } = await supabase.from("products").select("*").in("category_id", ids).order("created_at", { ascending: false });
+    const { data: products } = await supabase.from("products").select("*").eq('is_active', true).in("category_id", ids).order("created_at", { ascending: false });
     const productList: any[] = products || [];
     // Fetch inventory to derive price ranges (original vs discounted)
     let priceMap: Record<string, { minOriginal: number | null; maxOriginal: number | null; minFinal: number | null; maxFinal: number | null; maxDiscountPercent: number }> = {};
