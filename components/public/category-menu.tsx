@@ -4,7 +4,7 @@ import { Menu } from "lucide-react";
 import { SideMenu } from "./side-menu";
 import type { PublicCategory } from "@/lib/services/public/categoryPublicService";
 import { createClient as createBrowserSupabase } from "@/lib/supabase/client";
-import { Sheet, SheetTrigger, SheetContent } from "@/components/ui/sheet";
+import { Sheet, SheetTrigger, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 export function CategoryMenu() {
     const [cats, setCats] = useState<PublicCategory[] | null>(null);
@@ -17,11 +17,12 @@ export function CategoryMenu() {
                     .from("categories")
                     .select("*")
                     .eq("is_active", true)
+                    .eq("is_deleted", false)
+                    .order("sort_order", { ascending: true })
                     .order("created_at", { ascending: false });
                 if (error) throw error;
                 setCats(data as PublicCategory[]);
-            } catch (e) {
-                // eslint-disable-next-line no-console
+            } catch {
                 setCats([]);
             } finally { setLoading(false); }
         })();
@@ -30,13 +31,13 @@ export function CategoryMenu() {
     return (
         <Sheet>
             <SheetTrigger>
-                <span className="inline-flex items-center gap-2">
-                    <Menu className="w-4 h-4" />
-                </span>
+                <Menu className="w-6 h-6" />
             </SheetTrigger>
-            {/* Mirror open state changes */}
-            <SheetContent title="Main Menu">
-                {loading && <p className="text-xs p-3 text-muted-foreground">Loading...</p>}
+            <SheetContent>
+                <SheetHeader className="sr-only">
+                    <SheetTitle>Main Menu</SheetTitle>
+                </SheetHeader>
+                {loading && <p className="text-xs text-muted-foreground">Loading...</p>}
                 {cats && <SideMenu categories={cats} />}
             </SheetContent>
         </Sheet>

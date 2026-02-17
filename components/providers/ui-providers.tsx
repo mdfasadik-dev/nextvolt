@@ -5,8 +5,9 @@ import { CartProvider } from "@/components/cart/cart-provider";
 
 export function UIProviders({ children }: { children: React.ReactNode }) {
     return (
-        <ToastProvider>
-            <CartProvider>{children}</CartProvider>
-        </ToastProvider>
+        <CartProvider>
+            {children}
+            <ToastProvider />
+        </CartProvider>
     );
 }

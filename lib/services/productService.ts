@@ -12,18 +12,24 @@ function slugify(input: string) {
 
 export class ProductService {
     private static wrap<T>(op: () => Promise<T>): Promise<T> { return op().catch((err: any) => { if (err?.code === "42501") err.message = "RLS blocked products operation"; throw err; }); }
-    static async list(): Promise<Product[]> { return this.wrap(async () => { const c = await createClient(); const { data, error } = await c.from("products").select("*").order("created_at", { ascending: false }); if (error) throw error; return data; }); }
-    static async listFeatured(limit = 8): Promise<Product[]> { return this.wrap(async () => { const c = await createClient(); const { data, error } = await c.from("products").select("*").eq("is_featured", true).eq("is_active", true).order("created_at", { ascending: false }).limit(limit); if (error) throw error; return data || []; }); }
-    static async listPaged(opts: { page: number; pageSize: number; search?: string }): Promise<{ rows: Product[]; total: number; page: number; pageSize: number; }> {
+    static async list(): Promise<Product[]> { return this.wrap(async () => { const c = await createClient(); const { data, error } = await c.from("products").select("*").eq("is_deleted", false).order("sort_order", { ascending: true }).order("created_at", { ascending: false }); if (error) throw error; return data; }); }
+    static async listFeatured(limit = 8): Promise<Product[]> { return this.wrap(async () => { const c = await createClient(); const { data, error } = await c.from("products").select("*").eq("is_featured", true).eq("is_active", true).eq("is_deleted", false).order("sort_order", { ascending: true }).order("created_at", { ascending: false }).limit(limit); if (error) throw error; return data || []; }); }
+    static async listPaged(opts: { page: number; pageSize: number; search?: string; categoryId?: string; categoryIds?: string[] }): Promise<{ rows: Product[]; total: number; page: number; pageSize: number; }> {
         return this.wrap(async () => {
-            const { page, pageSize, search } = opts;
+            const { page, pageSize, search, categoryId, categoryIds } = opts;
             const from = (page - 1) * pageSize; const to = from + pageSize - 1;
             const c = await createClient();
-            let q = c.from('products').select('*', { count: 'exact' });
+            let q = c.from('products').select('*', { count: 'exact' }).eq("is_deleted", false);
+            const scopedCategoryIds = Array.from(new Set((categoryIds || []).filter(Boolean)));
+            if (scopedCategoryIds.length) {
+                q = q.in("category_id", scopedCategoryIds);
+            } else if (categoryId) {
+                q = q.eq("category_id", categoryId);
+            }
             if (search && search.trim().length) {
                 q = q.or(`name.ilike.%${search}%,slug.ilike.%${search}%,brand.ilike.%${search}%`);
             }
-            q = q.order('created_at', { ascending: false }).range(from, to);
+            q = q.order("sort_order", { ascending: true }).order('created_at', { ascending: false }).range(from, to);
             const { data, error, count } = await q;
             if (error) throw error;
             return { rows: data || [], total: count || 0, page, pageSize };
@@ -31,5 +37,61 @@ export class ProductService {
     }
     static async create(input: ProductCreate): Promise<Product | null> { return this.wrap(async () => { const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient(); const payload = { ...input, slug: input.slug ? slugify(input.slug) : slugify(input.name) }; const { data, error } = await c.from("products").insert(payload).select().single(); if (error) throw error; return data; }); }
     static async update(id: string, patch: ProductUpdate): Promise<Product | null> { return this.wrap(async () => { const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient(); const payload = { ...patch, slug: patch.slug ? slugify(patch.slug) : patch.name ? slugify(patch.name) : patch.slug }; const { data, error } = await c.from("products").update(payload).eq("id", id).select().single(); if (error) throw error; return data; }); }
-    static async remove(id: string): Promise<{ id: string } | null> { return this.wrap(async () => { const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient(); const { error } = await c.from("products").delete().eq("id", id); if (error) throw error; return { id }; }); }
+    static async remove(id: string): Promise<{ id: string } | null> { return this.wrap(async () => { const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient(); const { error } = await c.from("products").update({ is_deleted: true, is_active: false }).eq("id", id); if (error) throw error; return { id }; }); }
+    static async softDeleteByCategory(categoryId: string): Promise<number> {
+        return this.softDeleteByCategoryIds([categoryId]);
+    }
+    static async softDeleteByCategoryIds(categoryIds: string[]): Promise<number> {
+        return this.wrap(async () => {
+            const uniqueIds = Array.from(new Set(categoryIds.filter(Boolean)));
+            if (!uniqueIds.length) return 0;
+            const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
+            const { data, error } = await c
+                .from("products")
+                .update({ is_deleted: true, is_active: false })
+                .in("category_id", uniqueIds)
+                .eq("is_deleted", false)
+                .select("id");
+            if (error) throw error;
+            return (data || []).length;
+        });
+    }
+
+    static async getNextSortOrderInCategory(categoryId: string): Promise<number> {
+        return this.wrap(async () => {
+            if (!categoryId) return 0;
+            const c = await createClient();
+            const { data, error } = await c
+                .from("products")
+                .select("sort_order")
+                .eq("category_id", categoryId)
+                .eq("is_deleted", false)
+                .order("sort_order", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+            if (error) throw error;
+            const maxOrder = data?.sort_order ?? -1;
+            return maxOrder + 1;
+        });
+    }
+
+    static async reorderInCategory(params: { categoryId: string; orderedIds: string[]; startOrder?: number }): Promise<void> {
+        return this.wrap(async () => {
+            const categoryId = params.categoryId;
+            const uniqueIds = Array.from(new Set((params.orderedIds || []).filter(Boolean)));
+            if (!categoryId || !uniqueIds.length) return;
+            const startOrder = Number.isFinite(params.startOrder) ? Number(params.startOrder) : 0;
+            const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
+            for (let i = 0; i < uniqueIds.length; i++) {
+                const sort_order = startOrder + i;
+                const { error } = await c
+                    .from("products")
+                    .update({ sort_order })
+                    .eq("id", uniqueIds[i])
+                    .eq("category_id", categoryId)
+                    .eq("is_deleted", false);
+                if (error) throw error;
+            }
+        });
+    }
 }

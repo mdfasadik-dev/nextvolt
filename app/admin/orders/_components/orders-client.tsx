@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { listOrders, getOrderDetail, updateOrderStatus, updateOrderNotes } from "../actions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { listOrders, updateOrderStatus, updateOrderNotes } from "../actions";
 import { ORDER_STATUS_OPTIONS } from "@/lib/constants/order-status";
 import type { OrderStatus } from "@/lib/constants/order-status";
 import type { OrderListResult, OrderSummary, OrderDetail } from "@/lib/services/orderService";
@@ -14,6 +14,7 @@ import { OrderStatusBadge } from "./order-status-badge";
 import { OrderDetailDialog } from "./order-detail-dialog";
 import { Eye, Search, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { PaginationControls } from "@/app/admin/variants/_components/pagination-controls";
 
 type OrderTab = OrderStatus | "all";
 
@@ -22,9 +23,11 @@ interface OrdersClientProps {
 }
 
 const ORDER_TABS: OrderTab[] = ["all", ...ORDER_STATUS_OPTIONS];
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 export function OrdersClient({ initial }: OrdersClientProps) {
     const toast = useToast();
+    const toastRef = useRef(toast);
     const [orders, setOrders] = useState<OrderSummary[]>(initial.orders);
     const [counts, setCounts] = useState<Record<OrderTab, number>>({
         ...initial.counts,
@@ -33,6 +36,9 @@ export function OrdersClient({ initial }: OrdersClientProps) {
     const [selectedStatus, setSelectedStatus] = useState<OrderTab>("all");
     const [search, setSearch] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
+    const [page, setPage] = useState(initial.page ?? 1);
+    const [pageSize, setPageSize] = useState(initial.pageSize ?? 20);
+    const [total, setTotal] = useState(initial.total ?? initial.orders.length);
     const [isFetching, startTransition] = useTransition();
 
     const [detailOpen, setDetailOpen] = useState(false);
@@ -45,6 +51,11 @@ export function OrdersClient({ initial }: OrdersClientProps) {
 
     const currencyFallback = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
     const isFirstLoad = useRef(true);
+    const previousSearchRef = useRef("");
+
+    useEffect(() => {
+        toastRef.current = toast;
+    }, [toast]);
 
     useEffect(() => {
         const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 400);
@@ -54,29 +65,41 @@ export function OrdersClient({ initial }: OrdersClientProps) {
     useEffect(() => {
         if (isFirstLoad.current) {
             isFirstLoad.current = false;
+            previousSearchRef.current = debouncedSearch;
             return;
         }
+
+        if (previousSearchRef.current !== debouncedSearch && page !== 1) {
+            previousSearchRef.current = debouncedSearch;
+            setPage(1);
+            return;
+        }
+        previousSearchRef.current = debouncedSearch;
+
         startTransition(async () => {
             try {
                 const response = await listOrders({
                     status: selectedStatus,
                     search: debouncedSearch,
+                    page,
+                    pageSize,
                 });
                 setOrders(response.orders);
                 setCounts({
                     ...response.counts,
                     all: response.counts.all ?? response.orders.length,
                 });
+                setTotal(response.total);
             } catch (error) {
                 console.error(error);
-                toast.push({
+                toastRef.current.push({
                     variant: "error",
                     title: "Unable to load orders",
                     description: "Please try again in a moment.",
                 });
             }
         });
-    }, [selectedStatus, debouncedSearch, toast]);
+    }, [selectedStatus, debouncedSearch, page, pageSize]);
 
     const formatDateTime = (iso: string) => {
         try {
@@ -86,40 +109,6 @@ export function OrdersClient({ initial }: OrdersClientProps) {
             }).format(new Date(iso));
         } catch {
             return iso;
-        }
-    };
-
-    const handleOpenDetail = async (order: OrderSummary) => {
-        setDetailOpen(true);
-        setActiveOrderId(order.id);
-        const cached = detailCache.current.get(order.id);
-        if (cached) {
-            setDetail(cached);
-            return;
-        }
-        setDetail(null);
-        setDetailLoading(true);
-        try {
-            const response = await getOrderDetail({ id: order.id });
-            if (response) {
-                detailCache.current.set(order.id, response);
-                setDetail(response);
-            } else {
-                toast.push({
-                    variant: "error",
-                    title: "Order unavailable",
-                    description: "This order could not be retrieved.",
-                });
-            }
-        } catch (error) {
-            console.error(error);
-            toast.push({
-                variant: "error",
-                title: "Unable to load order",
-                description: "Please try again later.",
-            });
-        } finally {
-            setDetailLoading(false);
         }
     };
 
@@ -239,34 +228,57 @@ export function OrdersClient({ initial }: OrdersClientProps) {
                 <CardHeader className="gap-4">
                     <CardTitle className="text-lg">Orders</CardTitle>
                     <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <Tabs
-                            className="w-full md:w-auto"
+                        <Select
                             value={selectedStatus}
-                            defaultValue="all"
-                            onValueChange={value => setSelectedStatus(value as OrderTab)}
+                            onValueChange={value => {
+                                setSelectedStatus(value as OrderTab);
+                                setPage(1);
+                            }}
                         >
-                            <TabsList className="flex w-full flex-wrap md:w-auto">
+                            <SelectTrigger className="w-full md:w-[220px]">
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
                                 {tabs.map(tab => (
-                                    <TabsTrigger key={tab.value} value={tab.value} className="flex items-center gap-1">
-                                        {tab.label}
-                                        <span className="rounded bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
-                                            {tab.count}
-                                        </span>
-                                    </TabsTrigger>
+                                    <SelectItem key={tab.value} value={tab.value}>
+                                        {tab.label} ({tab.count})
+                                    </SelectItem>
                                 ))}
-                            </TabsList>
-                        </Tabs>
-                        <div className="relative w-full max-w-xs">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input
-                                value={search}
-                                onChange={event => setSearch(event.target.value)}
-                                placeholder="Search orders (id, name, email…)"
-                                className="pl-9"
-                            />
-                            {isFetching && (
-                                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
-                            )}
+                            </SelectContent>
+                        </Select>
+                        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                            <div className="relative w-full max-w-xs">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    value={search}
+                                    onChange={event => setSearch(event.target.value)}
+                                    placeholder="Search orders (id, name, email…)"
+                                    className="pl-9"
+                                />
+                                {isFetching && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    </div>
+                                )}
+                            </div>
+                            <Select
+                                value={String(pageSize)}
+                                onValueChange={value => {
+                                    setPageSize(Number(value));
+                                    setPage(1);
+                                }}
+                            >
+                                <SelectTrigger className="w-[132px]">
+                                    <SelectValue placeholder="Per page" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {PAGE_SIZE_OPTIONS.map(option => (
+                                        <SelectItem key={option} value={String(option)}>
+                                            {option} / page
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 </CardHeader>
@@ -339,6 +351,21 @@ export function OrdersClient({ initial }: OrdersClientProps) {
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-xs text-muted-foreground">
+                            Showing {orders.length === 0 ? 0 : (page - 1) * pageSize + 1}
+                            {" - "}
+                            {Math.min(page * pageSize, total)} of {total} orders
+                        </p>
+                        <PaginationControls
+                            page={page}
+                            pageSize={pageSize}
+                            total={total}
+                            disabled={isFetching}
+                            onPageChange={setPage}
+                            className="mt-0"
+                        />
                     </div>
                 </CardContent>
             </Card>

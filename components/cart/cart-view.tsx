@@ -45,8 +45,8 @@ export function CartView({ className, onCheckoutNavigate }: CartViewProps) {
     };
 
     return (
-        <div className={cn("flex h-full flex-col gap-4", className)}>
-            <div className="flex items-center justify-between">
+        <div className={cn("flex h-full flex-col gap-4 py-4", className)}>
+            <div className="flex items-center justify-between pt-4">
                 <h2 className="text-lg font-semibold">Cart Overview</h2>
                 {cart.items.length > 0 && (
                     <span className="text-sm text-muted-foreground">{cart.itemCount} item{cart.itemCount > 1 ? "s" : ""}</span>

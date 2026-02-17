@@ -1,8 +1,16 @@
 import { notFound } from "next/navigation";
 import { OrderService } from "@/lib/services/orderService";
 import { ConfirmationClient } from "./confirmation-client";
+import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = buildPageMetadata({
+    title: "Order Confirmation",
+    description: "Order confirmation details.",
+    pathname: "/confirmation",
+    noIndex: true,
+});
 
 export default async function OrderConfirmationPage(props: { params: Promise<{ id: string }> }) {
     const params = await props.params;

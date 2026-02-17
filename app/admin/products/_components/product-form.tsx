@@ -3,7 +3,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ImagePlus, Loader2 as Spinner, Loader2, X, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2 as Spinner, Loader2, Star, Trash2, X } from "lucide-react";
 import Image from 'next/image';
 import type { Product } from "@/lib/services/productService";
 import type { Category } from "@/lib/services/categoryService";
@@ -12,6 +12,10 @@ import { useProductFormLogic, ProductFormValues } from "./useProductFormLogic";
 import { WarningDialog } from "@/components/ui/warning-dialog";
 import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Markdown } from '@/components/markdown';
+import { PRODUCT_BADGE_COLOR_OPTIONS, type ProductBadgeColor } from "@/lib/constants/product-badge";
+import { ProductBadgePill } from "@/components/products/product-badge-pill";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 // values interface re-exported from hook
 
@@ -36,16 +40,25 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
         categoryIdDraft, setCategoryIdDraft,
         attributeValues, setAttributeValues, selectedAttrIds, setSelectedAttrIds,
         attrToAdd, setAttrToAdd,
-        existingImageUrl, pickedFile, removalRequested, setRemovalRequested,
-        submitting, uploading, displayImageUrl,
-        pickNewFile, handleSubmit,
-        setPickedFile, setExistingImageUrl,
+        previewImages, coverImageUrl,
+        badgeEnabled, setBadgeEnabled,
+        badgeLabel, setBadgeLabel,
+        badgeColor, setBadgeColor,
+        badgeStartsAt, setBadgeStartsAt,
+        badgeEndsAt, setBadgeEndsAt,
+        badgeIsActive, setBadgeIsActive,
+        submitting, uploading,
+        pickNewFiles, removeExistingImage, removePickedFile, setImageAsCover, handleSubmit,
         imageWarning, setImageWarning,
         detailsMd, setDetailsMd,
     } = logic;
 
+    const badgeColorOption = PRODUCT_BADGE_COLOR_OPTIONS.find((option) => option.value === badgeColor);
+    const isCustomBadgeColor = !badgeColorOption && !!badgeColor;
+    const isHexColor = (value: string) => /^#([0-9a-fA-F]{6})$/.test(value.trim());
+    const customColorValue = isHexColor(badgeColor) ? badgeColor : "#ef4444";
+
     // expose logic to parent once
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     React.useEffect(() => { onLogic?.(logic); }, [logic, onLogic]);
 
     return (
@@ -78,6 +91,17 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                     <Input name="brand" defaultValue={editing?.brand || undefined} onChange={e => onValuesChange?.({ brand: e.target.value })} />
                 </div>
                 <div className="space-y-1">
+                    <label className="text-xs">Weight (grams)</label>
+                    <Input
+                        name="weight_grams"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        defaultValue={editing?.weight_grams ?? 0}
+                        onChange={e => onValuesChange?.({ weight_grams: Number(e.target.value || 0) })}
+                    />
+                </div>
+                <div className="space-y-1">
                     <label className="text-xs">Description</label>
                     <textarea name="description" defaultValue={editing?.description || undefined} onChange={e => onValuesChange?.({ description: e.target.value })} className="w-full rounded-md border bg-background p-2 text-sm min-h-[70px]" />
                 </div>
@@ -91,40 +115,196 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                         <label htmlFor="is_active" className="text-xs">Active</label>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Checkbox id="is_featured" name="is_featured" defaultChecked={(editing as any)?.is_featured ?? false} onCheckedChange={v => onValuesChange?.({ is_featured: !!v })} />
+                        <Checkbox id="is_featured" name="is_featured" defaultChecked={editing?.is_featured ?? false} onCheckedChange={v => onValuesChange?.({ is_featured: !!v })} />
                         <label htmlFor="is_featured" className="text-xs">Featured</label>
                     </div>
                 </div>
                 <div className="space-y-1">
-                    <label className="text-xs">Main Image</label>
-                    <div className="flex items-center gap-3">
-                        {!removalRequested && displayImageUrl ? (
-                            <div className="relative w-16 h-16 rounded border overflow-hidden bg-muted">
-                                <Image src={displayImageUrl!} alt="preview" fill sizes="64px" className="object-cover" />
+                    <label className="text-xs">Product Images</label>
+                    <div className="space-y-3">
+                        {coverImageUrl ? (
+                            <div className="relative aspect-square w-full max-w-[260px] rounded border overflow-hidden bg-muted">
+                                <Image src={coverImageUrl} alt="Cover preview" fill sizes="260px" className="object-cover" />
                             </div>
                         ) : (
-                            <div className="w-16 h-16 rounded border flex items-center justify-center text-muted-foreground text-[10px]">{removalRequested ? 'Removed' : 'No Image'}</div>
+                            <div className="w-full max-w-[260px] aspect-square rounded border flex items-center justify-center text-muted-foreground text-[10px]">
+                                No image selected
+                            </div>
                         )}
-                        <Button type="button" size="sm" variant="secondary" onClick={pickNewFile} disabled={uploading || submitting}>
-                            <ImagePlus className="w-3 h-3 mr-1" />{pickedFile ? 'Change' : (existingImageUrl ? 'Replace' : 'Select')}
+                        <Button type="button" size="sm" variant="secondary" onClick={pickNewFiles} disabled={uploading || submitting}>
+                            <ImagePlus className="w-3 h-3 mr-1" />Add Images
                         </Button>
-                        {(existingImageUrl || pickedFile) && !uploading && (
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                    if (pickedFile) setPickedFile(null);
-                                    if (existingImageUrl) setRemovalRequested(true); // keep URL for deletion on submit
-                                }}
-                            >
-                                <Trash2 className="w-3 h-3 mr-1" />Remove
-                            </Button>
-                        )}
+                        {previewImages.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                                {previewImages.map((img) => {
+                                    const isCover = !!coverImageUrl && img.url === coverImageUrl;
+                                    const sourceIndex = img.sourceIndex;
+                                    return (
+                                        <div key={img.key} className="space-y-1">
+                                            <div className="relative aspect-square w-full overflow-hidden rounded border bg-muted">
+                                                <Image src={img.url} alt={img.name || "Product image"} fill sizes="120px" className="object-cover" />
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <Button
+                                                    type="button"
+                                                    variant={isCover ? "default" : "outline"}
+                                                    size="sm"
+                                                    className="h-6 flex-1 px-1 text-[10px]"
+                                                    onClick={() => {
+                                                        if (img.source === 'existing') {
+                                                            setImageAsCover('existing', sourceIndex);
+                                                        } else {
+                                                            setImageAsCover('pending', sourceIndex);
+                                                        }
+                                                    }}
+                                                    disabled={isCover || sourceIndex < 0}
+                                                >
+                                                    <Star className="mr-1 h-3 w-3" />
+                                                    {isCover ? 'Cover' : 'Set cover'}
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 px-1 text-[10px] text-red-600 hover:text-red-700"
+                                                    onClick={() => {
+                                                        if (img.source === 'existing') {
+                                                            removeExistingImage(sourceIndex);
+                                                        } else {
+                                                            removePickedFile(sourceIndex);
+                                                        }
+                                                    }}
+                                                    disabled={sourceIndex < 0}
+                                                >
+                                                    <Trash2 className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : null}
                     </div>
-                    {removalRequested && <p className="text-[10px] text-amber-600">Image will be removed on save.</p>}
                     {uploading && <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Spinner className="w-3 h-3 animate-spin" />Uploading image…</p>}
-                    <p className="text-[10px] text-muted-foreground">Max size 1 MB. For best results, use a square (1:1) image.</p>
+                    <p className="text-[10px] text-muted-foreground">Max size 1 MB per image. Cover image is the first image and used in listings.</p>
+                </div>
+                <div className="space-y-2 rounded-md border p-3">
+                    <div className="flex items-center justify-between">
+                        <label htmlFor="badge_enabled" className="text-xs font-medium">Badge</label>
+                        <div className="flex items-center gap-2">
+                            <Checkbox id="badge_enabled" checked={badgeEnabled} onCheckedChange={(value) => setBadgeEnabled(!!value)} />
+                            <span className="text-[10px] text-muted-foreground">Enable badge</span>
+                        </div>
+                    </div>
+                    {badgeEnabled ? (
+                        <div className="space-y-2">
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted-foreground">Label</label>
+                                    <Input
+                                        value={badgeLabel}
+                                        onChange={(e) => setBadgeLabel(e.target.value)}
+                                        placeholder="e.g. Hot Deal"
+                                        maxLength={32}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted-foreground">Color</label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="flex h-9 w-full items-center justify-between rounded-md border bg-background px-3 text-sm"
+                                            >
+                                                <span className="flex items-center gap-2">
+                                                    <span
+                                                        className={cn(
+                                                            "h-4 w-4 rounded-full ring-1",
+                                                            badgeColorOption ? badgeColorOption.className : "ring-black/10"
+                                                        )}
+                                                        style={isCustomBadgeColor ? { backgroundColor: customColorValue } : undefined}
+                                                    />
+                                                    <span>
+                                                        {badgeColorOption?.label || (isCustomBadgeColor ? "Custom" : "Select color")}
+                                                    </span>
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground">
+                                                    {badgeColorOption?.value || (isCustomBadgeColor ? customColorValue.toUpperCase() : "")}
+                                                </span>
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent align="start" className="w-64 p-3">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                {PRODUCT_BADGE_COLOR_OPTIONS.map((option) => (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        onClick={() => setBadgeColor(option.value as ProductBadgeColor)}
+                                                        className={cn(
+                                                            "flex items-center gap-2 rounded-md border px-2 py-1 text-xs transition hover:bg-muted",
+                                                            badgeColor === option.value
+                                                                ? "border-primary bg-muted"
+                                                                : "border-transparent"
+                                                        )}
+                                                    >
+                                                        <span className={cn("h-3 w-3 rounded-full ring-1", option.className)} />
+                                                        <span>{option.label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <div className="mt-3 border-t pt-3">
+                                                <p className="mb-2 text-[11px] text-muted-foreground">Custom color</p>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="color"
+                                                        value={customColorValue}
+                                                        onChange={(e) => setBadgeColor(e.target.value as ProductBadgeColor)}
+                                                        className="h-8 w-10 rounded border border-input bg-background p-0"
+                                                    />
+                                                    <Input
+                                                        value={customColorValue}
+                                                        readOnly
+                                                        className="h-8 text-xs"
+                                                    />
+                                                </div>
+                                                <p className="mt-2 text-[10px] text-muted-foreground">
+                                                    Pick a custom color if the preset palette doesn&apos;t match.
+                                                </p>
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            </div>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted-foreground">Start Date</label>
+                                    <Input
+                                        type="datetime-local"
+                                        value={badgeStartsAt}
+                                        onChange={(e) => setBadgeStartsAt(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted-foreground">End Date (optional)</label>
+                                    <Input
+                                        type="datetime-local"
+                                        value={badgeEndsAt}
+                                        onChange={(e) => setBadgeEndsAt(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex items-center justify-between rounded-md bg-muted/40 px-2 py-1">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox id="badge_active" checked={badgeIsActive} onCheckedChange={(value) => setBadgeIsActive(!!value)} />
+                                    <label htmlFor="badge_active" className="text-[11px]">Badge active</label>
+                                </div>
+                                <ProductBadgePill label={badgeLabel || "Badge Preview"} color={badgeColor} className="relative left-auto top-auto translate-x-0 translate-y-0 shadow-sm" />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">If end date is empty, the badge stays visible forever after start date.</p>
+                        </div>
+                    ) : (
+                        <p className="text-[10px] text-muted-foreground">No badge will be shown on product images.</p>
+                    )}
                 </div>
                 {attributes.length > 0 && (
                     <div className="space-y-2">
@@ -146,6 +326,11 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                             <div className="space-y-2 max-h-52 overflow-auto pr-1 border rounded-md p-2">
                                 {selectedAttrIds.map(id => {
                                     const attr = attributes.find(a => a.id === id)!;
+                                    const rawValue = attributeValues[id];
+                                    const inputValue =
+                                        typeof rawValue === "string" || typeof rawValue === "number"
+                                            ? rawValue
+                                            : "";
                                     return (
                                         <div key={id} className="space-y-1 border-b last:border-b-0 pb-2 last:pb-0">
                                             <div className="flex items-center justify-between">
@@ -168,7 +353,7 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                                                 <Input
                                                     type={attr.data_type === 'number' ? 'number' : 'text'}
                                                     placeholder={attr.data_type === 'number' ? 'Enter number' : 'Value'}
-                                                    value={attributeValues[id] ?? ''}
+                                                    value={inputValue}
                                                     onChange={e => setAttributeValues(prev => ({ ...prev, [id]: e.target.value }))}
                                                 />
                                             )}

@@ -1,19 +1,37 @@
 "use client";
-import { useCrud } from "@/lib/hooks/useCrud";
+import Link from "next/link";
 import type { Category } from "@/lib/services/categoryService";
 import { CategoryForm } from "./category-form";
 import { CategoryTable } from "./category-table";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { listCategories, createCategory, updateCategory, deleteCategory, listCategoriesPaged } from "../actions";
+import { createCategory, updateCategory, deleteCategory, listCategoriesPaged, reorderCategories } from "../actions";
 import { listAttributes } from "@/app/admin/attributes/actions";
 import type { Attribute } from "@/lib/services/attributeService";
 import { useState, useEffect } from "react";
 import { fetchCategoryAttributes } from "../detail-actions";
 import { useToast } from "@/components/ui/toast-provider";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface Props { initial: Category[] }
+
+function moveItemWithPlacement<T>(items: T[], fromIndex: number, toIndex: number, placement: "before" | "after"): T[] {
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length || fromIndex === toIndex) {
+        return items;
+    }
+    const next = [...items];
+    const [moved] = next.splice(fromIndex, 1);
+    let insertIndex = toIndex;
+    if (fromIndex < toIndex) {
+        insertIndex = placement === "before" ? toIndex - 1 : toIndex;
+    } else {
+        insertIndex = placement === "before" ? toIndex : toIndex + 1;
+    }
+    if (insertIndex < 0) insertIndex = 0;
+    if (insertIndex > next.length) insertIndex = next.length;
+    next.splice(insertIndex, 0, moved);
+    return next;
+}
 
 export function CategoriesClient({ initial }: Props) {
     const toast = useToast();
@@ -24,6 +42,7 @@ export function CategoriesClient({ initial }: Props) {
     const [total, setTotal] = useState<number>(initial.length); // will be updated on first paged fetch
     const [search, setSearch] = useState("");
     const [loadingPage, setLoadingPage] = useState(false);
+    const [reordering, setReordering] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     async function load(p = page, s = search) {
@@ -53,7 +72,8 @@ export function CategoriesClient({ initial }: Props) {
         try { await updateCategory(values); await load(page, search); } catch (e: any) { throw e; }
     }
     async function remove(id: string) { try { await deleteCategory({ id }); await load(page, search); } catch (e: any) { throw e; } }
-    const isPending = loadingPage; // reuse naming
+    const isPending = loadingPage || reordering; // reuse naming
+    const reorderDisabled = isPending || !!search.trim();
     const [editing, setEditing] = useState<Category | null>(null);
     const [deleting, setDeleting] = useState<Set<string>>(new Set());
     const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -99,28 +119,47 @@ export function CategoriesClient({ initial }: Props) {
 
     async function executeDelete(id: string) {
         setDeleting(prev => new Set(prev).add(id));
-        const target = records.find(r => r.id === id);
-        const imageUrl = (target as any)?.image_url as string | undefined;
         try {
             await remove(id);
             toast.push({ variant: "success", title: "Category deleted" });
-            if (imageUrl) {
-                fetch('/api/uploads/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: imageUrl }) }).catch(() => { });
-            }
         } catch (e: any) {
-            const code = e?.code;
-            const message: string = e?.message || "Delete failed";
-            const isFkProducts = code === "23503" && /products.*violates foreign key constraint|products_category_id_fkey/i.test(message);
-            const isCustom = code === 'CATEGORY_HAS_PRODUCTS';
-            if (isCustom || isFkProducts) {
-                const category = records.find(r => r.id === id);
-                setFkBlocked({ categoryId: id, categoryName: category?.name || "(unknown)", productCount: e?.productCount });
-            } else {
-                toast.push({ variant: "error", title: "Delete failed", description: message });
-            }
+            toast.push({ variant: "error", title: "Delete failed", description: e?.message || "Delete failed" });
         } finally {
             setDeleting(prev => { const n = new Set(prev); n.delete(id); return n; });
             setConfirmId(null);
+        }
+    }
+
+    async function handleReorder(dragId: string, targetId: string, placement: "before" | "after") {
+        if (reordering) return;
+        let previous: Category[] = [];
+        let next: Category[] = [];
+
+        setRecords((current) => {
+            previous = current;
+            const fromIndex = current.findIndex((item) => item.id === dragId);
+            const toIndex = current.findIndex((item) => item.id === targetId);
+            next = moveItemWithPlacement(current, fromIndex, toIndex, placement);
+            return next;
+        });
+
+        if (next.length === 0 || next === previous) return;
+
+        setReordering(true);
+        try {
+            await reorderCategories({
+                orderedIds: next.map((item) => item.id),
+                startOrder: (page - 1) * pageSize,
+            });
+        } catch (e: any) {
+            setRecords(previous);
+            toast.push({
+                variant: "error",
+                title: "Reorder failed",
+                description: e?.message || "Unable to update category order",
+            });
+        } finally {
+            setReordering(false);
         }
     }
 
@@ -132,7 +171,7 @@ export function CategoriesClient({ initial }: Props) {
                         <DialogTitle>Cannot Delete Category</DialogTitle>
                         <button onClick={() => setFkBlocked(null)} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
                     </DialogHeader>
-                    <DialogBody className="space-y-4 text-sm">
+                    <div className="py-4 space-y-4 text-sm">
                         {fkBlocked && (
                             <>
                                 <p><span className="font-medium">{fkBlocked.categoryName}</span> still has {fkBlocked.productCount != null ? <span className="font-semibold">{fkBlocked.productCount}</span> : 'one or more'} product(s) assigned. You must remove or reassign those products before deleting this category.</p>
@@ -145,9 +184,9 @@ export function CategoriesClient({ initial }: Props) {
                                 <div className="text-xs bg-muted/50 rounded-md p-2">Database error code 23503 (foreign key violation) prevented the delete to protect related products.</div>
                             </>
                         )}
-                    </DialogBody>
+                    </div>
                     <DialogFooter>
-                        <a href="/admin/products" className="text-xs rounded-md border px-3 py-1 hover:bg-accent">View Products</a>
+                        <Link href="/admin/products" className="text-xs rounded-md border px-3 py-1 hover:bg-accent">View Products</Link>
                         <button onClick={() => setFkBlocked(null)} className="text-xs rounded-md border px-3 py-1">Dismiss</button>
                     </DialogFooter>
                 </DialogContent>
@@ -230,12 +269,17 @@ export function CategoriesClient({ initial }: Props) {
                             <div className="text-xs text-muted-foreground">
                                 {isPending ? 'Loading…' : total === 0 ? 'No results' : `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
                             </div>
+                            {search.trim() ? (
+                                <div className="text-xs text-muted-foreground">Clear search to drag and reorder.</div>
+                            ) : null}
                         </div>
                         <CategoryTable
                             data={records}
                             onEdit={setEditing}
                             onDelete={confirmDelete}
                             deletingIds={deleting}
+                            onReorder={handleReorder}
+                            reorderDisabled={reorderDisabled}
                         />
                         <PaginationControls
                             page={page}
@@ -250,7 +294,7 @@ export function CategoriesClient({ initial }: Props) {
             <ConfirmDialog
                 open={!!confirmId}
                 title="Delete Category"
-                description="This action cannot be undone. The category will be permanently removed."
+                description="This will soft delete the category and related products. They will no longer appear on the site."
                 confirmLabel="Delete"
                 variant="danger"
                 onCancel={() => setConfirmId(null)}

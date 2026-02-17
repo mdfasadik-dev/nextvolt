@@ -11,6 +11,7 @@ import { Loader2, Package, Search } from "lucide-react";
 type ProductRow = Tables<"products">;
 
 type ProductResult = Pick<ProductRow, "id" | "name" | "slug" | "brand">;
+type ProductSearchQueryRow = Pick<ProductRow, "id" | "name" | "slug" | "brand" | "category_id">;
 
 interface ProductSearchBarProps {
     className?: string;
@@ -60,11 +61,13 @@ export function ProductSearchBar({
             setErrorMessage(null);
             const { data, error } = await supabase
                 .from("products")
-                .select("id,name,slug,brand")
+                .select("id,name,slug,brand,category_id")
                 .eq("is_active", true)
+                .eq("is_deleted", false)
                 .or(`name.ilike.%${sanitizedTerm}%,slug.ilike.%${sanitizedTerm}%,brand.ilike.%${sanitizedTerm}%`)
+                .order("sort_order", { ascending: true })
                 .order("created_at", { ascending: false })
-                .limit(maxResults);
+                .limit(Math.max(maxResults * 3, maxResults));
             if (cancelled) return;
             if (error) {
                 console.error("Product search failed", error);
@@ -72,7 +75,36 @@ export function ProductSearchBar({
                 setResults([]);
                 setIsOpen(true);
             } else {
-                setResults(data ?? []);
+                const rows = (data || []) as ProductSearchQueryRow[];
+                const categoryIds = Array.from(
+                    new Set(rows.map((row) => row.category_id).filter((id): id is string => Boolean(id)))
+                );
+
+                let activeCategorySet = new Set<string>();
+                if (categoryIds.length > 0) {
+                    const { data: activeCategories, error: categoryError } = await supabase
+                        .from("categories")
+                        .select("id")
+                        .eq("is_active", true)
+                        .eq("is_deleted", false)
+                        .in("id", categoryIds);
+                    if (categoryError) {
+                        console.error("Category visibility check failed", categoryError);
+                        setErrorMessage("Problem searching products");
+                        setResults([]);
+                        setIsOpen(true);
+                        setIsLoading(false);
+                        return;
+                    }
+                    activeCategorySet = new Set((activeCategories || []).map((category) => category.id));
+                }
+
+                const visibleResults: ProductResult[] = rows
+                    .filter((row) => !row.category_id || activeCategorySet.has(row.category_id))
+                    .slice(0, maxResults)
+                    .map(({ id, name, slug, brand }) => ({ id, name, slug, brand }));
+
+                setResults(visibleResults);
                 setIsOpen(true);
             }
             setIsLoading(false);

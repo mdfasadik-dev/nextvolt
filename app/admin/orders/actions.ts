@@ -20,7 +20,7 @@ async function assertAuthenticated() {
 }
 
 export async function listOrders(
-    input: { status?: OrderStatus | "all"; search?: string } = {},
+    input: { status?: OrderStatus | "all"; search?: string; page?: number; pageSize?: number } = {},
 ): Promise<OrderListResult> {
     noStore();
     await assertAuthenticated();

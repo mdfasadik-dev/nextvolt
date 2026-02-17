@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { CustomerService } from "@/lib/services/customerService";
 
 export interface DashboardStats {
     products: number;
@@ -19,25 +20,19 @@ export class DashboardService {
         const supabase = await createAdminClient();
 
         // Run counts in parallel
-        const [products, orders, customers, inventory, categories, attributes] = await Promise.all([
-            supabase.from("products").select("*", { count: "exact", head: true }),
+        const [products, orders, customersCount, inventory, categories, attributes] = await Promise.all([
+            supabase.from("products").select("*", { count: "exact", head: true }).eq("is_deleted", false),
             supabase.from("orders").select("*", { count: "exact", head: true }),
-            // Customers might be profiles or just auth users, usually profiles table in a real app, 
-            // but if not present we might fall back or query auth.users if possible (admin only).
-            // For now assuming a 'customers' or similar table exists or we skip.
-            // Checking previous file usage: app/admin/page.tsx used a Promise.resolve({count:0}) fallback.
-            // I will keep the fallback logic for customers if no table exists, but if 'customers' table 
-            // is desired I would query it. I'll stick to a safe 0 for now unless I verify the table exists.
-            Promise.resolve({ count: 0, error: null }),
+            CustomerService.countUnique().catch(() => 0),
             supabase.from("inventory").select("*", { count: "exact", head: true }),
-            supabase.from("categories").select("*", { count: "exact", head: true }),
+            supabase.from("categories").select("*", { count: "exact", head: true }).eq("is_deleted", false),
             supabase.from("attributes").select("*", { count: "exact", head: true }),
         ]);
 
         return {
             products: products.count ?? 0,
             orders: orders.count ?? 0,
-            customers: customers.count ?? 0,
+            customers: customersCount,
             inventory: inventory.count ?? 0,
             categories: categories.count ?? 0,
             attributes: attributes.count ?? 0,

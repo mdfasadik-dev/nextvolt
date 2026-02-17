@@ -13,6 +13,48 @@ import { useToast } from '@/components/ui/toast-provider';
 
 interface Props { initial: Store | null }
 
+type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+type HoursSlot = { open: string; close: string };
+type OpeningHoursState = Record<DayKey, HoursSlot[]>;
+
+const EMPTY_OPENING_HOURS: OpeningHoursState = {
+    mon: [],
+    tue: [],
+    wed: [],
+    thu: [],
+    fri: [],
+    sat: [],
+    sun: [],
+};
+
+function normalizeOpeningHours(raw: unknown): OpeningHoursState {
+    const next: OpeningHoursState = { ...EMPTY_OPENING_HOURS };
+
+    if (!raw || typeof raw !== 'object') return next;
+
+    (Object.keys(next) as DayKey[]).forEach((day) => {
+        const daySlots = (raw as Record<string, unknown>)[day];
+        if (!Array.isArray(daySlots)) return;
+
+        next[day] = daySlots
+            .filter((slot) => slot && typeof slot === 'object')
+            .map((slot) => {
+                const record = slot as Record<string, unknown>;
+                return {
+                    open: typeof record.open === 'string' ? record.open : '',
+                    close: typeof record.close === 'string' ? record.close : '',
+                };
+            });
+    });
+
+    return next;
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+}
+
 export function StoreSingletonClient({ initial }: Props) {
     const toast = useToast();
     const [store, setStore] = useState<Store | null>(initial);
@@ -37,13 +79,14 @@ export function StoreSingletonClient({ initial }: Props) {
     const [removeDark, setRemoveDark] = useState(false);
     const [saving, setSaving] = useState(false);
     // Opening hours: structure { mon: [{ open: "09:00", close: "17:00" }], ... }
-    type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
     const dayLabels: Record<DayKey, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
-    const defaultHours: Record<DayKey, { open: string; close: string }[]> = { mon: [], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] };
-    const [openingHours, setOpeningHours] = useState<Record<DayKey, { open: string; close: string }[]>>(() => { const raw: any = (store as any)?.opening_hours; if (raw && typeof raw === 'object') { return { ...defaultHours, ...raw }; } return defaultHours; });
+    const [openingHours, setOpeningHours] = useState<OpeningHoursState>(() => normalizeOpeningHours(store?.opening_hours));
     const [hoursDirty, setHoursDirty] = useState(false);
 
-    useEffect(() => { setStore(initial); }, [initial]);
+    useEffect(() => {
+        setStore(initial);
+        setOpeningHours(normalizeOpeningHours(initial?.opening_hours));
+    }, [initial]);
 
     function pick(kind: 'light' | 'dark') {
         const input = document.createElement('input');
@@ -69,8 +112,8 @@ export function StoreSingletonClient({ initial }: Props) {
             if (deleteLight && logoLight) { fetch('/api/uploads/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: logoLight }) }).catch(() => { }); }
             if (deleteDark && logoDark) { fetch('/api/uploads/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: logoDark }) }).catch(() => { }); }
             toast.push({ variant: 'success', title: `${section ? section + ': ' : ''}Store saved` });
-        } catch (e: any) {
-            toast.push({ variant: 'error', title: 'Save failed', description: e?.message });
+        } catch (error: unknown) {
+            toast.push({ variant: 'error', title: 'Save failed', description: getErrorMessage(error, 'Could not save store settings.') });
         } finally { setSaving(false); }
     }
 
@@ -116,7 +159,7 @@ export function StoreSingletonClient({ initial }: Props) {
                         <HoursEditor
                             openingHours={openingHours}
                             dayLabels={dayLabels}
-                            onChange={(next) => setOpeningHours(next as any)}
+                            onChange={(next) => setOpeningHours(next)}
                             markDirty={() => setHoursDirty(true)}
                         />
                     </div>
@@ -162,32 +205,33 @@ function isValidTime(val: string) {
 // We'll re-open the component file scope to access parent state by converting HoursEditor to closure inside main component, but since it's already defined below we pass props.
 
 interface HoursEditorProps {
-    openingHours: Record<string, { open: string; close: string }[]>;
-    dayLabels: Record<string, string>;
-    onChange: (next: Record<string, { open: string; close: string }[]>) => void;
+    openingHours: OpeningHoursState;
+    dayLabels: Record<DayKey, string>;
+    onChange: (next: OpeningHoursState) => void;
     markDirty: () => void;
 }
 
 function HoursEditor({ openingHours, dayLabels, onChange, markDirty }: HoursEditorProps) {
-    const days = Object.keys(dayLabels) as string[];
+    const days = Object.keys(dayLabels) as DayKey[];
 
-    function addSlot(day: string) {
+    function addSlot(day: DayKey) {
         const next = { ...openingHours, [day]: [...(openingHours[day] || []), { open: '09:00', close: '17:00' }] };
         onChange(next); markDirty();
     }
-    function updateSlot(day: string, idx: number, field: 'open' | 'close', value: string) {
+    function updateSlot(day: DayKey, idx: number, field: 'open' | 'close', value: string) {
         const list = [...(openingHours[day] || [])];
-        list[idx] = { ...list[idx], [field]: value };
+        const current = list[idx] || { open: '', close: '' };
+        list[idx] = { open: current.open || '', close: current.close || '', [field]: value };
         const next = { ...openingHours, [day]: list };
         onChange(next); markDirty();
     }
-    function removeSlot(day: string, idx: number) {
+    function removeSlot(day: DayKey, idx: number) {
         const list = [...(openingHours[day] || [])];
         list.splice(idx, 1);
         const next = { ...openingHours, [day]: list };
         onChange(next); markDirty();
     }
-    function duplicateDay(day: string) {
+    function duplicateDay(day: DayKey) {
         // Duplicate Monday pattern to others, etc.
         const source = openingHours[day] || [];
         const next = { ...openingHours };
@@ -214,13 +258,15 @@ function HoursEditor({ openingHours, dayLabels, onChange, markDirty }: HoursEdit
                             {slots.length === 0 && <div className="text-[10px] text-muted-foreground">Closed</div>}
                             <div className="space-y-2">
                                 {slots.map((slot, i) => {
-                                    const openInvalid = slot.open && !isValidTime(slot.open);
-                                    const closeInvalid = slot.close && !isValidTime(slot.close);
+                                    const openValue = typeof slot?.open === 'string' ? slot.open : '';
+                                    const closeValue = typeof slot?.close === 'string' ? slot.close : '';
+                                    const openInvalid = openValue && !isValidTime(openValue);
+                                    const closeInvalid = closeValue && !isValidTime(closeValue);
                                     return (
                                         <div key={i} className="flex items-center gap-2 text-xs">
-                                            <input value={slot.open} onChange={e => updateSlot(day, i, 'open', e.target.value)} placeholder="09:00" className={`w-20 rounded border px-2 py-1 bg-background ${openInvalid ? 'border-red-500' : ''}`} />
+                                            <input value={openValue} onChange={e => updateSlot(day, i, 'open', e.target.value)} placeholder="09:00" className={`w-20 rounded border px-2 py-1 bg-background ${openInvalid ? 'border-red-500' : ''}`} />
                                             <span>-</span>
-                                            <input value={slot.close} onChange={e => updateSlot(day, i, 'close', e.target.value)} placeholder="17:00" className={`w-20 rounded border px-2 py-1 bg-background ${closeInvalid ? 'border-red-500' : ''}`} />
+                                            <input value={closeValue} onChange={e => updateSlot(day, i, 'close', e.target.value)} placeholder="17:00" className={`w-20 rounded border px-2 py-1 bg-background ${closeInvalid ? 'border-red-500' : ''}`} />
                                             <button type="button" onClick={() => removeSlot(day, i)} className="ml-2 text-red-500 hover:underline">Remove</button>
                                         </div>
                                     );
@@ -233,4 +279,3 @@ function HoursEditor({ openingHours, dayLabels, onChange, markDirty }: HoursEdit
         </div>
     );
 }
-

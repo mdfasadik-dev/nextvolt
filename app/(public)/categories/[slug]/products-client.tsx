@@ -1,12 +1,12 @@
 "use client";
-import { useState, useMemo } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Funnel } from 'lucide-react';
 import { Sheet, SheetTrigger, SheetContent } from '@/components/ui/sheet';
 import { ProductCardsGrid } from '@/components/public/product-cards-grid';
+import type { Tables } from '@/lib/types/supabase';
 
-type Product = { id: string; name: string; slug: string | null; description?: string | null; main_image_url?: string | null; brand?: string | null };
+type Product = Tables<'products'>;
 interface AttributeFilterValue { valueKey: string; label: string; count: number }
 interface AttributeFilter { attribute: { id: string; name: string; data_type: string }; values: AttributeFilterValue[] }
 
@@ -14,13 +14,16 @@ interface Props {
     categoryName: string;
     descendantCount: number;
     products: Product[];
+    badgeMap: Record<string, { label: string; color: string } | null>;
     priceMap: Record<string, { minOriginal: number | null; maxOriginal: number | null; minFinal: number | null; maxFinal: number | null; maxDiscountPercent: number }>;
     attributeFilters: AttributeFilter[];
     productAttributeMap: Record<string, Record<string, string>>; // productId -> { attributeId: valueKey }
 }
 
-export default function CategoryProductsClient({ categoryName, descendantCount, products, priceMap, attributeFilters, productAttributeMap }: Props) {
+export default function CategoryProductsClient({ categoryName, descendantCount, products, badgeMap, priceMap, attributeFilters, productAttributeMap }: Props) {
     const [selected, setSelected] = useState<Record<string, Set<string>>>({});
+    const [page, setPage] = useState(1);
+    const pageSize = 16;
 
     function toggle(attrId: string, valueKey: string) {
         setSelected(prev => {
@@ -45,6 +48,30 @@ export default function CategoryProductsClient({ categoryName, descendantCount, 
             return true;
         });
     }, [products, selected, productAttributeMap]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredProducts.length / pageSize));
+
+    useEffect(() => {
+        setPage(1);
+    }, [selected, products.length]);
+
+    useEffect(() => {
+        if (page > totalPages) {
+            setPage(totalPages);
+        }
+    }, [page, totalPages]);
+
+    const startIndex = (page - 1) * pageSize;
+    const pagedProducts = filteredProducts.slice(startIndex, startIndex + pageSize);
+    const windowSize = 1;
+    const paginationItems: (number | "ellipsis")[] = [];
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || Math.abs(i - page) <= windowSize) {
+            paginationItems.push(i);
+        } else if (paginationItems[paginationItems.length - 1] !== "ellipsis") {
+            paginationItems.push("ellipsis");
+        }
+    }
 
     const filterSidebar = attributeFilters.length > 0 ? (
         <div>
@@ -103,11 +130,56 @@ export default function CategoryProductsClient({ categoryName, descendantCount, 
                     </div>
                 )}
                 <h1 className="text-2xl font-semibold mb-2">{categoryName}</h1>
-                <p className="text-xs text-muted-foreground mb-6">Showing {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'} {Object.keys(selected).length ? 'matching filters' : descendantCount ? 'from this category and its subcategories' : 'from this category'}.</p>
+                <p className="text-xs text-muted-foreground mb-6">
+                    {filteredProducts.length > 0
+                        ? `Showing ${startIndex + 1}-${Math.min(startIndex + pageSize, filteredProducts.length)} of ${filteredProducts.length} product${filteredProducts.length === 1 ? '' : 's'} ${Object.keys(selected).length ? 'matching filters' : 'from this category'}.`
+                        : 'Showing 0 products.'}
+                </p>
                 {filteredProducts.length === 0 ? (
                     <div className="text-sm text-muted-foreground border rounded-md p-6">No products match selected filters.</div>
                 ) : (
-                    <ProductCardsGrid products={filteredProducts as any} priceMap={priceMap as any} symbol={process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$'} />
+                    <>
+                        <ProductCardsGrid products={pagedProducts} badgeMap={badgeMap} priceMap={priceMap} symbol={process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$'} />
+                        {totalPages > 1 ? (
+                            <div className="mt-6 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    disabled={page === 1}
+                                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                                    className="h-8 rounded-md border px-2 text-xs disabled:opacity-40"
+                                >
+                                    Prev
+                                </button>
+                                <ul className="flex items-center gap-1">
+                                    {paginationItems.map((item, index) => item === "ellipsis" ? (
+                                        <li key={`ellipsis-${index}`} className="px-1 text-xs text-muted-foreground">...</li>
+                                    ) : (
+                                        <li key={item}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPage(item)}
+                                                aria-current={item === page ? "page" : undefined}
+                                                className={cn(
+                                                    "h-8 w-8 rounded-md border text-xs",
+                                                    item === page ? "bg-primary text-white font-medium" : "hover:bg-accent/60"
+                                                )}
+                                            >
+                                                {item}
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <button
+                                    type="button"
+                                    disabled={page === totalPages}
+                                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                                    className="h-8 rounded-md border px-2 text-xs disabled:opacity-40"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        ) : null}
+                    </>
                 )}
             </main>
         </div>

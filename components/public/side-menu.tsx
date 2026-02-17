@@ -10,15 +10,21 @@ interface TreeNode extends PublicCategory { children: TreeNode[] }
 
 function buildTree(categories: PublicCategory[]): TreeNode[] {
     const map: Record<string, TreeNode> = {};
-    categories.forEach(c => { (map[c.id] = { ...(c as any), children: [] }); });
+    categories.forEach(c => { map[c.id] = { ...c, children: [] }; });
     const roots: TreeNode[] = [];
     Object.values(map).forEach(node => {
         if (node.parent_id && map[node.parent_id]) {
             map[node.parent_id].children.push(node);
         } else { roots.push(node); }
     });
-    // optional: sort alphabetically by name
-    const sortRec = (arr: TreeNode[]) => { arr.sort((a, b) => a.name.localeCompare(b.name)); arr.forEach(n => sortRec(n.children)); };
+    const sortRec = (arr: TreeNode[]) => {
+        arr.sort((a, b) => {
+            const orderDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+            if (orderDiff !== 0) return orderDiff;
+            return a.name.localeCompare(b.name);
+        });
+        arr.forEach(n => sortRec(n.children));
+    };
     sortRec(roots);
     return roots;
 }

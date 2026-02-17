@@ -263,8 +263,8 @@ function MarkdownEditorInner({
     );
 
     return (
-        <div className={cn("border rounded-md bg-background flex flex-col overflow-hidden", className)}>
-            <div className="flex items-center gap-1 border-b px-2 h-9 bg-muted/40">
+        <div className={cn("border rounded-md bg-background flex min-w-0 flex-col overflow-hidden", className)}>
+            <div className="flex flex-wrap items-center gap-1 border-b bg-muted/40 px-2 py-1">
                 {/* Inline styles */}
                 {toolbarBtn(Bold, () => applyWrap("**", "**", "bold"), "Bold")}
                 {toolbarBtn(Italic, () => applyWrap("*", "*", "italic"), "Italic")}
@@ -304,10 +304,10 @@ function MarkdownEditorInner({
                         {showPreview ? "Edit" : "Preview"}
                     </button>
                 )} */}
-                {preview === "split" && <span className="ml-auto text-[10px] text-muted-foreground">Split View</span>}
+                {preview === "split" && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Split View</span>}
             </div>
 
-            <div className={cn(preview === "split" ? "grid grid-cols-2 gap-0" : "block", "w-full")}>
+            <div className={cn(preview === "split" ? "grid gap-0 md:grid-cols-2" : "block", "min-w-0 w-full")}>
                 {(!showPreview || preview === "split") && (
                     <textarea
                         ref={textareaRef}

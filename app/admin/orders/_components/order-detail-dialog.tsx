@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ORDER_STATUS_OPTIONS } from "@/lib/constants/order-status";
@@ -69,7 +69,7 @@ export function OrderDetailDialog({
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange} align="top">
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-3xl">
                 <DialogHeader className="gap-3">
                     <div className="flex flex-col">
@@ -122,7 +122,7 @@ export function OrderDetailDialog({
                         </Button>
                     </div>
                 </DialogHeader>
-                <DialogBody className="space-y-6">
+                <div className="py-4 space-y-6">
                     {isLoading && (
                         <div className="space-y-4">
                             <div className="h-4 w-48 animate-pulse rounded bg-muted" />
@@ -149,7 +149,7 @@ export function OrderDetailDialog({
                                 </DetailCard>
                                 <DetailCard title="Summary">
                                     <div className="space-y-2">
-                                    {totals?.map(item => (
+                                        {totals?.map(item => (
                                             <div
                                                 key={item.label}
                                                 className={cn(
@@ -235,7 +235,7 @@ export function OrderDetailDialog({
                             </section>
                         </>
                     )}
-                </DialogBody>
+                </div>
                 <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                         Close

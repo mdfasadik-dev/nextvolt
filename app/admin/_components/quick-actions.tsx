@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { PlusCircle, ShoppingBag, Box, Users, Settings, Tag } from "lucide-react";
+import { PlusCircle, ShoppingBag, Box, Users, Settings, Tag, Megaphone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -11,7 +11,7 @@ const actions = [
     { label: "Inventory", icon: Box, href: "/admin/inventory", variant: "outline" as const },
     { label: "Categories", icon: Tag, href: "/admin/categories", variant: "outline" as const },
     { label: "Customers", icon: Users, href: "/admin/customers", variant: "outline" as const },
-    { label: "Settings", icon: Settings, href: "/admin/settings", variant: "ghost" as const },
+    { label: "Promotions", icon: Megaphone, href: "/admin/promotions", variant: "ghost" as const },
 ];
 
 export function QuickActions() {

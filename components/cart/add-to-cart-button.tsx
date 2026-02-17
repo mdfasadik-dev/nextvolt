@@ -60,7 +60,7 @@ export const AddToCartButton = forwardRef<HTMLButtonElement, AddToCartButtonProp
             },
             quantity,
         );
-        toast.push({ variant: "success", title: "Added to cart", description: `${productName} has been added to your cart.` });
+        toast.push({ variant: "success", title: "Added to cart", description: `${productName} has been added to your cart.` })
     };
 
     return (

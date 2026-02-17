@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MarkdownEditor } from '@/components/ui/markdown-editor';
 import { Markdown } from '@/components/markdown';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { StorageService } from '@/lib/services/storageService';
 import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
@@ -19,9 +19,23 @@ interface Props {
     onOpenChange: (o: boolean) => void;
     editing: Variant | null;
     products: Product[];
-    onSave: (payload: any) => Promise<void>; // create
-    onUpdate: (id: string, payload: any) => Promise<void>;
+    onSave: (payload: VariantFormPayload) => Promise<void>; // create
+    onUpdate: (id: string, payload: VariantFormPayload) => Promise<void>;
     isPending: boolean;
+}
+
+type VariantFormPayload = {
+    product_id: string;
+    title: string | null;
+    sku: string | null;
+    is_active: boolean;
+    image_url: string | null;
+    details_md: string | null;
+};
+
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
 }
 
 export function VariantFormDialog({ open, onOpenChange, editing, products, onSave, onUpdate, isPending }: Props) {
@@ -36,9 +50,20 @@ export function VariantFormDialog({ open, onOpenChange, editing, products, onSav
     const [showMdPreview, setShowMdPreview] = useState(false);
 
     useEffect(() => {
+        if (!open) {
+            setWarningMsg(null);
+            setShowMdPreview(false);
+        }
+    }, [open]);
+
+    useEffect(() => {
         if (editing) {
-            setExistingImageUrl((editing as any).image_url || null);
-            setDetailsMd((editing as any).details_md || "");
+            const row = editing as Variant & {
+                image_url?: string | null;
+                details_md?: string | null;
+            };
+            setExistingImageUrl(row.image_url || null);
+            setDetailsMd(row.details_md || "");
             setPickedFile(null);
             setRemovalRequested(false);
         } else {
@@ -112,171 +137,176 @@ export function VariantFormDialog({ open, onOpenChange, editing, products, onSav
                 } catch { }
             }
             onOpenChange(false);
-        } catch (e: any) {
-            toast.push({ variant: "error", title: "Save failed", description: e?.message });
+        } catch (e: unknown) {
+            toast.push({
+                variant: "error",
+                title: "Save failed",
+                description: getErrorMessage(e, "Unable to save variant."),
+            });
         }
     }
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>{editing ? 'Edit Variant' : 'New Variant'}</DialogTitle>
-                    <button
-                        onClick={() => onOpenChange(false)}
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                    >
-                        Close
-                    </button>
-                </DialogHeader>
-                <DialogBody>
-                    <form onSubmit={handleSubmit} className="space-y-3" id="variant-form">
-                        <div className="space-y-1">
-                            <label className="text-xs">Product</label>
-                            <select
-                                name="product_id"
-                                defaultValue={editing?.product_id || ''}
-                                required
-                                className="w-full h-9 rounded-md border bg-background px-2 text-sm"
-                            >
-                                {!editing && <option value="" disabled>Select product...</option>}
-                                {products.map((p) => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs">Title</label>
-                            <Input name="title" defaultValue={editing?.title || undefined} />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs">SKU</label>
-                            <Input name="sku" defaultValue={editing?.sku || undefined} />
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Checkbox id="is_active_v" name="is_active" defaultChecked={editing?.is_active ?? true} />
-                            <label htmlFor="is_active_v" className="text-xs">
-                                Active
-                            </label>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs">Image</label>
-                            <div className="flex items-center gap-3">
-                                {!removalRequested && previewUrl ? (
-                                    <div className="relative w-16 h-16 object-cover rounded border bg-muted overflow-hidden">
-                                        <Image
-                                            src={previewUrl}
-                                            alt="preview"
-                                            fill
-                                            sizes="64px"
-                                            className="object-cover"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="w-16 h-16 rounded border flex items-center justify-center text-[10px] text-muted-foreground">
-                                        {removalRequested ? 'Removed' : 'No Image'}
-                                    </div>
-                                )}
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="secondary"
-                                    onClick={() => {
-                                        const input = document.createElement('input');
-                                        input.type = 'file';
-                                        input.accept = 'image/*';
-                                        input.onchange = () => {
-                                            if (input.files && input.files[0]) {
-                                                const file = input.files[0];
-                                                ensureImageUnder1MB(file)
-                                                    .then(() => {
-                                                        setPickedFile(file);
-                                                        setRemovalRequested(false);
-                                                    })
-                                                    .catch((err) => setWarningMsg(err?.message || 'Invalid image. Must be under 1 MB.'));
-                                            }
-                                        };
-                                        input.click();
-                                    }}
-                                    disabled={uploadingImg}
+            <DialogContent className="w-[calc(100%-2rem)] overflow-hidden p-0 sm:max-w-4xl lg:max-w-5xl">
+                <div className="flex h-[min(90vh,920px)] min-h-0 min-w-0 flex-col">
+                    <DialogHeader className="border-b px-4 py-4 sm:px-6">
+                        <DialogTitle>{editing ? 'Edit Variant' : 'New Variant'}</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6">
+                        <form onSubmit={handleSubmit} className="min-w-0 space-y-3" id="variant-form">
+                            <div className="space-y-1">
+                                <label className="text-xs">Product</label>
+                                <select
+                                    name="product_id"
+                                    defaultValue={editing?.product_id || ''}
+                                    required
+                                    className="w-full h-9 rounded-md border bg-background px-2 text-sm"
                                 >
-                                    <ImagePlus className="w-3 h-3 mr-1" />
-                                    {pickedFile ? 'Change' : existingImageUrl ? 'Replace' : 'Select'}
-                                </Button>
-                                {(existingImageUrl || pickedFile) && !uploadingImg && (
+                                    {!editing && <option value="" disabled>Select product...</option>}
+                                    {products.map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                            {p.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs">Title</label>
+                                <Input name="title" defaultValue={editing?.title || undefined} />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs">SKU</label>
+                                <Input name="sku" defaultValue={editing?.sku || undefined} />
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Checkbox id="is_active_v" name="is_active" defaultChecked={editing?.is_active ?? true} />
+                                <label htmlFor="is_active_v" className="text-xs">
+                                    Active
+                                </label>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs">Image</label>
+                                <div className="flex flex-wrap items-start gap-2 sm:gap-3">
+                                    {!removalRequested && previewUrl ? (
+                                        <div className="relative w-16 h-16 object-cover rounded border bg-muted overflow-hidden">
+                                            <Image
+                                                src={previewUrl}
+                                                alt="preview"
+                                                fill
+                                                sizes="64px"
+                                                className="object-cover"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="w-16 h-16 rounded border flex items-center justify-center text-[10px] text-muted-foreground">
+                                            {removalRequested ? 'Removed' : 'No Image'}
+                                        </div>
+                                    )}
                                     <Button
                                         type="button"
                                         size="sm"
-                                        variant="ghost"
+                                        variant="secondary"
                                         onClick={() => {
-                                            if (pickedFile) setPickedFile(null);
-                                            if (existingImageUrl) {
-                                                setRemovalRequested(true);
-                                            }
+                                            const input = document.createElement('input');
+                                            input.type = 'file';
+                                            input.accept = 'image/*';
+                                            input.onchange = () => {
+                                                if (input.files && input.files[0]) {
+                                                    const file = input.files[0];
+                                                    ensureImageUnder1MB(file)
+                                                        .then(() => {
+                                                            setPickedFile(file);
+                                                            setRemovalRequested(false);
+                                                        })
+                                                        .catch((err) => setWarningMsg(err?.message || 'Invalid image. Must be under 1 MB.'));
+                                                }
+                                            };
+                                            input.click();
                                         }}
+                                        disabled={uploadingImg}
+                                        className="w-full sm:w-auto"
                                     >
-                                        <Trash2 className="w-3 h-3 mr-1" />Remove
+                                        <ImagePlus className="w-3 h-3 mr-1" />
+                                        {pickedFile ? 'Change' : existingImageUrl ? 'Replace' : 'Select'}
                                     </Button>
+                                    {(existingImageUrl || pickedFile) && !uploadingImg && (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => {
+                                                if (pickedFile) setPickedFile(null);
+                                                if (existingImageUrl) {
+                                                    setRemovalRequested(true);
+                                                }
+                                            }}
+                                            className="w-full sm:w-auto"
+                                        >
+                                            <Trash2 className="w-3 h-3 mr-1" />Remove
+                                        </Button>
+                                    )}
+                                </div>
+                                {removalRequested && (
+                                    <p className="text-[10px] text-amber-600">Image will be removed on save.</p>
+                                )}
+                                {uploadingImg && (
+                                    <p className="text-[10px] text-muted-foreground">Uploading...</p>
+                                )}
+                                <p className="text-[10px] text-muted-foreground">
+                                    Max size 1 MB. For best results, use a square (1:1) image.
+                                </p>
+                                {warningMsg && (
+                                    <p className="text-[10px] text-red-600">{warningMsg}</p>
                                 )}
                             </div>
-                            {removalRequested && (
-                                <p className="text-[10px] text-amber-600">Image will be removed on save.</p>
-                            )}
-                            {uploadingImg && (
-                                <p className="text-[10px] text-muted-foreground">Uploading...</p>
-                            )}
-                            <p className="text-[10px] text-muted-foreground">
-                                Max size 1 MB. For best results, use a square (1:1) image.
-                            </p>
-                            {warningMsg && (
-                                <p className="text-[10px] text-red-600">{warningMsg}</p>
-                            )}
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                                <label className="text-xs font-medium">Details (Markdown)</label>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowMdPreview((p) => !p)}
-                                >
-                                    {showMdPreview ? 'Edit' : 'Preview'}
-                                </Button>
-                            </div>
-                            {!showMdPreview ? (
-                                <MarkdownEditor value={detailsMd} onChange={setDetailsMd} />
-                            ) : (
-                                <div className="border rounded-md p-2 bg-muted/30 max-h-[250px] overflow-auto">
-                                    <Markdown content={detailsMd || '*No content*'} />
+                            <div className="min-w-0 space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <label className="text-xs font-medium">Details (Markdown)</label>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowMdPreview((p) => !p)}
+                                    >
+                                        {showMdPreview ? 'Edit' : 'Preview'}
+                                    </Button>
                                 </div>
+                                {!showMdPreview ? (
+                                    <MarkdownEditor value={detailsMd} onChange={setDetailsMd} className="min-w-0" />
+                                ) : (
+                                    <div className="border rounded-md p-2 bg-muted/30 max-h-[250px] overflow-auto">
+                                        <Markdown content={detailsMd || '*No content*'} />
+                                    </div>
+                                )}
+                            </div>
+                        </form>
+                    </div>
+
+                    <DialogFooter className="border-t px-4 py-3 sm:px-6">
+                        <button
+                            type="button"
+                            onClick={() => onOpenChange(false)}
+                            className="text-xs rounded-md border px-3 py-1"
+                        >
+                            Cancel
+                        </button>
+                        <Button
+                            form="variant-form"
+                            type="submit"
+                            disabled={isPending || uploadingImg}
+                            className="text-xs"
+                        >
+                            {(isPending || uploadingImg) && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             )}
-                        </div>
-                    </form>
-                </DialogBody>
-                <DialogFooter>
-                    <button
-                        onClick={() => onOpenChange(false)}
-                        className="text-xs rounded-md border px-3 py-1"
-                    >
-                        Cancel
-                    </button>
-                    <Button
-                        form="variant-form"
-                        type="submit"
-                        disabled={isPending || uploadingImg}
-                        className="text-xs"
-                    >
-                        {(isPending || uploadingImg) && (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        {editing
-                            ? (isPending || uploadingImg) ? 'Updating' : 'Update'
-                            : (isPending || uploadingImg) ? 'Creating' : 'Create'}
-                    </Button>
-                </DialogFooter>
+                            {editing
+                                ? (isPending || uploadingImg) ? 'Updating' : 'Update'
+                                : (isPending || uploadingImg) ? 'Creating' : 'Create'}
+                        </Button>
+                    </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     );

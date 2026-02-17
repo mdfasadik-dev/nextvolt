@@ -3,14 +3,15 @@
 import { FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, CheckCircle2, Loader2, Tag } from "lucide-react";
+import Image from "next/image";
+import { AlertCircle, Loader2, Tag } from "lucide-react";
 import { useCart } from "./cart-provider";
 import { useCustomerStorage } from "./use-customer-storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { calculateCheckout, getCheckoutDeliveryOptions } from "@/app/(public)/checkout/actions";
+import { calculateCheckout, getCheckoutDeliveryOptionsForItems } from "@/app/(public)/checkout/actions";
 import { CalculatedTotals } from "@/lib/services/checkoutService";
 import { Separator } from "@/components/ui/separator";
 
@@ -18,11 +19,19 @@ function formatMoney(value: number, symbol: string) {
     return `${symbol}${value.toFixed(2)}`;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+}
+
 type DeliveryOption = {
     id: string;
     label: string;
     amount: number;
+    base_amount: number;
     is_default: boolean;
+    total_weight_grams: number;
+    has_weight_rules: boolean;
 };
 
 export function CheckoutForm() {
@@ -37,6 +46,11 @@ export function CheckoutForm() {
     const [selectedDelivery, setSelectedDelivery] = useState<string>("");
     const [couponCode, setCouponCode] = useState("");
     const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+    const [couponState, setCouponState] = useState<{
+        state: "idle" | "success" | "error";
+        message?: string;
+    }>({ state: "idle" });
+    const [pricingError, setPricingError] = useState<string | null>(null);
     const [totals, setTotals] = useState<CalculatedTotals | null>(null);
     const [isCalculating, startProcesing] = useTransition();
 
@@ -44,13 +58,37 @@ export function CheckoutForm() {
     const currencyCode = process.env.NEXT_PUBLIC_CURRENCY_CODE || "USD";
 
     useEffect(() => {
-        getCheckoutDeliveryOptions().then((opts) => {
-            setDeliveryOptions(opts);
-            const def = opts.find(o => o.is_default);
-            if (def) setSelectedDelivery(def.id);
-            else if (opts.length > 0) setSelectedDelivery(opts[0].id);
+        if (!cart.items.length) {
+            setDeliveryOptions([]);
+            setSelectedDelivery("");
+            return;
+        }
+
+        let cancelled = false;
+        const inputItems = cart.items.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            price: item.price,
+        }));
+
+        getCheckoutDeliveryOptionsForItems(inputItems).then((opts) => {
+            if (cancelled) return;
+            setDeliveryOptions(opts as DeliveryOption[]);
+            setSelectedDelivery((previous) => {
+                if (previous && opts.some((opt) => opt.id === previous)) return previous;
+                const def = opts.find((opt) => opt.is_default);
+                if (def) return def.id;
+                return opts.length > 0 ? opts[0].id : "";
+            });
+        }).catch(() => {
+            if (cancelled) return;
+            setDeliveryOptions([]);
         });
-    }, []);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [cart.items]);
 
     // Recalculate whenever dependencies change
     useEffect(() => {
@@ -65,9 +103,29 @@ export function CheckoutForm() {
                 );
                 if (res.success && res.data) {
                     setTotals(res.data as CalculatedTotals);
+                    setPricingError(null);
                 } else {
-                    // If coupon failed, remove it? keeping it simple for now
-                    console.error(res.error);
+                    if (appliedCoupon) {
+                        setCouponState({
+                            state: "error",
+                            message: res.error || "Coupon could not be applied.",
+                        });
+                        setAppliedCoupon(null);
+
+                        const fallback = await calculateCheckout(
+                            cart.items.map(i => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+                            selectedDelivery,
+                            undefined
+                        );
+                        if (fallback.success && fallback.data) {
+                            setTotals(fallback.data as CalculatedTotals);
+                            setPricingError(null);
+                        } else if (fallback.error) {
+                            setPricingError(fallback.error);
+                        }
+                    } else if (res.error) {
+                        setPricingError(res.error);
+                    }
                 }
             });
         }, 500); // Debounce
@@ -77,18 +135,55 @@ export function CheckoutForm() {
 
 
     const handleApplyCoupon = () => {
-        if (!couponCode) return;
-        setAppliedCoupon(couponCode);
+        const normalizedCode = couponCode.trim().toUpperCase();
+        if (!normalizedCode) {
+            setCouponState({ state: "error", message: "Please enter a coupon code." });
+            return;
+        }
+
+        startProcesing(async () => {
+            const res = await calculateCheckout(
+                cart.items.map(i => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+                selectedDelivery,
+                normalizedCode
+            );
+
+            if (res.success && res.data) {
+                setTotals(res.data as CalculatedTotals);
+                setAppliedCoupon(normalizedCode);
+                setCouponCode(normalizedCode);
+                setPricingError(null);
+                setCouponState({
+                    state: "success",
+                    message: `Coupon ${normalizedCode} applied successfully.`,
+                });
+                return;
+            }
+
+            setAppliedCoupon(null);
+            if (res.error && res.error.toLowerCase().includes("unavailable")) {
+                setPricingError(res.error);
+            }
+            setCouponState({
+                state: "error",
+                message: res.error || "Coupon could not be applied.",
+            });
+        });
     };
 
     const handleRemoveCoupon = () => {
         setAppliedCoupon(null);
         setCouponCode("");
+        setCouponState({ state: "idle" });
     };
 
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         if (status.state === "submitting") return;
+        if (pricingError) {
+            setStatus({ state: "error", message: pricingError });
+            return;
+        }
         if (!customer.fullName.trim() || !customer.phone.trim() || !customer.address.trim()) {
             setStatus({ state: "error", message: "Please provide name, phone, and address." });
             return;
@@ -138,10 +233,10 @@ export function CheckoutForm() {
                 message: `Order placed successfully. Reference: ${data.order.id.slice(0, 8).toUpperCase()}`,
             });
             router.push(`/confirmation/${data.order.id}`); // Redirect to confirmation page
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({
                 state: "error",
-                message: error?.message || "Something went wrong while placing your order.",
+                message: getErrorMessage(error, "Something went wrong while placing your order."),
             });
         }
     };
@@ -157,7 +252,7 @@ export function CheckoutForm() {
         );
     }
 
-    const disabled = !ready || status.state === "submitting";
+    const disabled = !ready || status.state === "submitting" || Boolean(pricingError);
 
     return (
         <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-[1.5fr,1fr]">
@@ -281,8 +376,17 @@ export function CheckoutForm() {
                             {cart.items.map((item) => (
                                 <li key={item.id} className="flex gap-4">
                                     <div className="h-16 w-16 rounded-md border bg-muted flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
-                                        {/* Placeholder for image */}
-                                        IMG
+                                        {item.imageUrl ? (
+                                            <Image
+                                                src={item.imageUrl}
+                                                alt={item.name}
+                                                width={64}
+                                                height={64}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <span>No image</span>
+                                        )}
                                     </div>
                                     <div className="flex-1 space-y-1">
                                         <p className="text-sm font-medium leading-none">{item.name}</p>
@@ -299,23 +403,52 @@ export function CheckoutForm() {
                                 <Input
                                     placeholder="Enter coupon"
                                     value={couponCode}
-                                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                    onChange={(e) => {
+                                        setCouponCode(e.target.value.toUpperCase());
+                                        if (!appliedCoupon && couponState.state !== "idle") {
+                                            setCouponState({ state: "idle" });
+                                        }
+                                    }}
                                     disabled={!!appliedCoupon}
                                 />
                                 {appliedCoupon ? (
                                     <Button type="button" variant="destructive" onClick={handleRemoveCoupon}>Remove</Button>
                                 ) : (
-                                    <Button type="button" variant="secondary" onClick={handleApplyCoupon}>Apply</Button>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        onClick={handleApplyCoupon}
+                                        disabled={isCalculating || !couponCode.trim()}
+                                    >
+                                        Apply
+                                    </Button>
                                 )}
                             </div>
+                            {couponState.state === "success" && couponState.message ? (
+                                <p className="text-xs text-green-600 flex items-center gap-1">
+                                    <Tag className="h-3 w-3" /> {couponState.message}
+                                </p>
+                            ) : null}
+                            {couponState.state === "error" && couponState.message ? (
+                                <p className="text-xs text-destructive flex items-center gap-1">
+                                    <AlertCircle className="h-3 w-3" /> {couponState.message}
+                                </p>
+                            ) : null}
                             {appliedCoupon && totals?.discount && (
                                 <p className="text-xs text-green-600 flex items-center gap-1">
-                                    <Tag className="h-3 w-3" /> Coupon {totals.discount.code} applied!
+                                    <Tag className="h-3 w-3" /> Discount applied: {totals.discount.code}
                                 </p>
                             )}
                         </div>
 
                         <Separator />
+
+                        {pricingError ? (
+                            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span>{pricingError}</span>
+                            </div>
+                        ) : null}
 
                         {isCalculating ? (
                             <div className="flex justify-center items-center py-8">
@@ -337,7 +470,7 @@ export function CheckoutForm() {
                                 )}
 
                                 {/* Charges Analysis */}
-                                {totals?.charges.length! > 0 && <Separator className="my-2 opacity-50" />}
+                                {(totals?.charges?.length ?? 0) > 0 && <Separator className="my-2 opacity-50" />}
 
                                 {totals?.charges.map(c => (
                                     <div key={c.id} className="flex justify-between items-center text-muted-foreground">
@@ -390,4 +523,3 @@ export function CheckoutForm() {
         </form>
     );
 }
-

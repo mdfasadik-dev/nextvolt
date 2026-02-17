@@ -3,6 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { SUPABASE_SERVICE_ROLE_KEY } from "@/lib/env";
 import { OrderService, OrderChargeInsert } from "@/lib/services/orderService";
 import { CheckoutService } from "@/lib/services/checkoutService";
+import type { Json } from "@/lib/types/supabase";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,10 @@ type InventoryRow = {
 
 function toMoney(value: number) {
     return Math.round(value * 100) / 100;
+}
+
+function toNullableString(value: unknown): string | null {
+    return typeof value === "string" ? value : null;
 }
 
 function computeFinalPrice(rows: InventoryRow[]): number | null {
@@ -156,7 +161,7 @@ export async function POST(request: NextRequest) {
                 base_amount: totals.discount.amount, // This might need adjustment if type is 'percent'
                 applied_amount: totals.discount.amount,
                 order_id: '',
-                coupon_id: (totals.discount as any).id, // We need to expose ID in CheckoutService if not already
+                coupon_id: totals.discount.id,
                 metadata: { label: `Coupon ${totals.discount.code}` }
             });
         }
@@ -177,17 +182,23 @@ export async function POST(request: NextRequest) {
         // 3.5 Prepare Shipping Address JSON with Contact Info
         // User requirements: No customers table. Store all info in shipping_address JSONB.
         // Structure: { fullName, email, phone, address: "..." }
-        let shippingAddressPayload: any = null;
+        let shippingAddressPayload: Json | null = null;
         if (contactData) {
+            const shippingAddress = contactData.shipping_address;
+            const nestedAddress =
+                shippingAddress && typeof shippingAddress === "object" && !Array.isArray(shippingAddress)
+                    ? (shippingAddress as Record<string, unknown>).address
+                    : null;
+
             shippingAddressPayload = {
-                fullName: contactData.fullName,
-                email: contactData.email,
-                phone: contactData.phone,
+                fullName: toNullableString(contactData.fullName),
+                email: toNullableString(contactData.email),
+                phone: toNullableString(contactData.phone),
                 // Address might be a string in 'shipping_address' prop of contactData?
                 // The form sends: contact: { fullName, email, phone, shipping_address: { address: "..." } }
                 // So we flatten it or keep it?
                 // Let's flatten for simplicity as per OrderService extraction logic which looks for root keys or standard keys
-                address: (contactData.shipping_address as any)?.address
+                address: toNullableString(nestedAddress),
             };
         }
 
@@ -198,7 +209,7 @@ export async function POST(request: NextRequest) {
             total_amount: totals.total,
             status: "pending",
             customer_id: null, // No customer linking
-            shipping_address: shippingAddressPayload as any,
+            shipping_address: shippingAddressPayload,
             notes,
             charges: charges
         });
@@ -233,8 +244,16 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ order, items: orderItemsPayload }, { status: 201 });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error("[checkout]", error);
-        return NextResponse.json({ error: error?.message || "Unexpected error" }, { status: 500 });
+        const message = error instanceof Error ? error.message : "Unexpected error";
+        const lowered = String(message).toLowerCase();
+        const isValidationError =
+            lowered.includes("coupon") ||
+            lowered.includes("minimum order amount") ||
+            lowered.includes("unavailable") ||
+            lowered.includes("inactive product") ||
+            lowered.includes("inactive category");
+        return NextResponse.json({ error: message }, { status: isValidationError ? 400 : 500 });
     }
 }

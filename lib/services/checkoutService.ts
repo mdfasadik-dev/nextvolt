@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { Tables } from "@/lib/types/supabase";
 
 export type CartItem = {
     productId: string;
@@ -7,16 +8,175 @@ export type CartItem = {
     price: number;
 };
 
+type DeliveryOptionRow = Tables<"delivery">;
+type DeliveryWeightRuleRow = Tables<"delivery_weight_rules">;
+
+type DeliveryPricingContext = {
+    totalWeightGrams: number;
+    rulesByDeliveryId: Map<string, DeliveryWeightRuleRow[]>;
+};
+
 export type CalculatedTotals = {
     subtotal: number;
     delivery: { id: string; label: string; amount: number } | null;
-    discount: { code: string; amount: number; type: string } | null;
+    discount: { id: string; code: string; amount: number; type: string } | null;
     charges: { id: string; label: string; amount: number; type: 'tax' | 'fee' | 'charge' | 'discount'; raw_value?: number; calc_type?: 'percent' | 'amount' }[];
     total: number;
 };
 
+function roundMoney(value: number) {
+    return Math.round(value * 100) / 100;
+}
+
+function computeUnits(value: number, rounding: string) {
+    if (rounding === "floor") return Math.floor(value);
+    if (rounding === "round") return Math.round(value);
+    return Math.ceil(value);
+}
+
+function ruleApplies(totalWeight: number, rule: DeliveryWeightRuleRow) {
+    if (totalWeight < rule.min_weight_grams) return false;
+    if (rule.max_weight_grams != null && totalWeight > rule.max_weight_grams) return false;
+    return true;
+}
+
+function computeRuleCharge(totalWeight: number, rule: DeliveryWeightRuleRow) {
+    const baseCharge = Number(rule.base_charge || 0);
+    const unitGrams = Number(rule.incremental_unit_grams || 0);
+    const unitCharge = Number(rule.incremental_charge || 0);
+    const baseWeight = Number(rule.base_weight_grams || 0);
+    const rounding = rule.increment_rounding || "ceil";
+
+    if (unitGrams <= 0 || unitCharge <= 0) {
+        return roundMoney(baseCharge);
+    }
+
+    const extraWeight = Math.max(0, totalWeight - baseWeight);
+    if (extraWeight <= 0) {
+        return roundMoney(baseCharge);
+    }
+
+    const units = Math.max(0, computeUnits(extraWeight / unitGrams, rounding));
+    return roundMoney(baseCharge + units * unitCharge);
+}
+
 export class CheckoutService {
-    static async getDeliveryOptions() {
+    private static async assertProductsAreCheckoutAvailable(items: Array<{ productId: string }>) {
+        const productIds = Array.from(new Set(items.map((item) => item.productId).filter(Boolean)));
+        if (productIds.length === 0) return;
+
+        const supabase = await createAdminClient();
+        const { data: products, error: productsError } = await supabase
+            .from("products")
+            .select("id,name,is_active,is_deleted,category_id")
+            .in("id", productIds);
+
+        if (productsError) throw productsError;
+
+        const productMap = new Map((products || []).map((product) => [product.id, product]));
+
+        const unavailableNames = new Set<string>();
+        for (const id of productIds) {
+            const product = productMap.get(id);
+            if (!product || !product.is_active || product.is_deleted) {
+                unavailableNames.add(product?.name || id);
+            }
+        }
+
+        const categoryIds = Array.from(
+            new Set(
+                (products || [])
+                    .map((product) => product.category_id)
+                    .filter((categoryId): categoryId is string => Boolean(categoryId))
+            )
+        );
+
+        if (categoryIds.length > 0) {
+            const { data: activeCategories, error: categoriesError } = await supabase
+                .from("categories")
+                .select("id")
+                .eq("is_active", true)
+                .eq("is_deleted", false)
+                .in("id", categoryIds);
+            if (categoriesError) throw categoriesError;
+
+            const activeCategorySet = new Set((activeCategories || []).map((category) => category.id));
+            for (const product of products || []) {
+                if (product.category_id && !activeCategorySet.has(product.category_id)) {
+                    unavailableNames.add(product.name || product.id);
+                }
+            }
+        }
+
+        if (unavailableNames.size > 0) {
+            const list = Array.from(unavailableNames);
+            const head = list.slice(0, 3).join(", ");
+            const suffix = list.length > 3 ? ` and ${list.length - 3} more` : "";
+            throw new Error(
+                `Some items in your cart are unavailable (inactive/deleted product or category): ${head}${suffix}. Please remove them and try again.`
+            );
+        }
+    }
+
+    private static async getProductWeightMap(items: Array<{ productId: string; quantity: number }>) {
+        const productIds = Array.from(new Set(items.map((item) => item.productId)));
+        if (productIds.length === 0) return new Map<string, number>();
+
+        const supabase = await createAdminClient();
+        const { data, error } = await supabase
+            .from("products")
+            .select("id,weight_grams")
+            .eq("is_deleted", false)
+            .in("id", productIds);
+
+        if (error) throw error;
+
+        const map = new Map<string, number>();
+        (data || []).forEach((row) => {
+            map.set(row.id, Number(row.weight_grams || 0));
+        });
+        return map;
+    }
+
+    private static async buildDeliveryPricingContext(items: Array<{ productId: string; quantity: number }>): Promise<DeliveryPricingContext> {
+        if (!items.length) {
+            return { totalWeightGrams: 0, rulesByDeliveryId: new Map() };
+        }
+
+        const weightMap = await this.getProductWeightMap(items);
+        const totalWeightGrams = items.reduce((total, item) => {
+            const unitWeight = weightMap.get(item.productId) || 0;
+            return total + unitWeight * item.quantity;
+        }, 0);
+
+        const supabase = await createAdminClient();
+        const { data: rules, error } = await supabase
+            .from("delivery_weight_rules")
+            .select("*")
+            .eq("is_active", true)
+            .order("sort_order", { ascending: true })
+            .order("min_weight_grams", { ascending: true });
+
+        if (error) throw error;
+
+        const grouped = new Map<string, DeliveryWeightRuleRow[]>();
+        (rules || []).forEach((rule) => {
+            const list = grouped.get(rule.delivery_id) || [];
+            list.push(rule);
+            grouped.set(rule.delivery_id, list);
+        });
+
+        return { totalWeightGrams, rulesByDeliveryId: grouped };
+    }
+
+    private static resolveDeliveryAmount(option: DeliveryOptionRow, context: DeliveryPricingContext) {
+        const rules = context.rulesByDeliveryId.get(option.id) || [];
+        const activeRule = rules.find((rule) => ruleApplies(context.totalWeightGrams, rule));
+        if (!activeRule) return Number(option.amount || 0);
+        return computeRuleCharge(context.totalWeightGrams, activeRule);
+    }
+
+    static async getDeliveryOptions(items?: Array<{ productId: string; quantity: number }>) {
         const supabase = await createAdminClient();
         const { data, error } = await supabase
             .from('delivery')
@@ -25,25 +185,39 @@ export class CheckoutService {
             .order('sort_order', { ascending: true });
 
         if (error) throw error;
+        const normalizedItems = (items || []).filter((item) => item.productId && item.quantity > 0);
+        const context = normalizedItems.length > 0 ? await this.buildDeliveryPricingContext(normalizedItems) : null;
+
         return data.map(d => ({
             id: d.id,
             label: d.label,
-            amount: d.amount,
-            is_default: d.is_default
+            amount: context ? this.resolveDeliveryAmount(d, context) : Number(d.amount),
+            base_amount: Number(d.amount),
+            is_default: d.is_default,
+            total_weight_grams: context?.totalWeightGrams ?? 0,
+            has_weight_rules: context ? (context.rulesByDeliveryId.get(d.id)?.length || 0) > 0 : false,
         }));
     }
 
     static async validateCoupon(code: string, subtotal: number) {
         const supabase = await createAdminClient();
+        const normalizedCode = code.trim().toUpperCase();
+        if (!normalizedCode) {
+            throw new Error("Please enter a coupon code.");
+        }
+
         const { data: coupon, error } = await supabase
             .from('coupons')
             .select('*')
-            .eq('code', code.toUpperCase())
-            .eq('is_active', true)
+            .eq('code', normalizedCode)
             .single();
 
         if (error || !coupon) {
-            throw new Error("Invalid or expired coupon code.");
+            throw new Error("Coupon code is invalid.");
+        }
+
+        if (!coupon.is_active) {
+            throw new Error("Coupon is inactive.");
         }
 
         const now = new Date();
@@ -54,7 +228,7 @@ export class CheckoutService {
             throw new Error("Coupon has expired.");
         }
         if (coupon.min_order_amount && subtotal < coupon.min_order_amount) {
-            throw new Error(`Minimum order amount of $${coupon.min_order_amount} required.`);
+            throw new Error(`Minimum order amount of ${coupon.min_order_amount} is required for this coupon.`);
         }
 
         // Calculate discount amount
@@ -82,6 +256,7 @@ export class CheckoutService {
         deliveryId?: string,
         couponCode?: string
     ): Promise<CalculatedTotals> {
+        await this.assertProductsAreCheckoutAvailable(items);
         const supabase = await createAdminClient();
 
         // 1. Calculate Subtotal
@@ -91,21 +266,14 @@ export class CheckoutService {
         // 2. Apply Coupon
         let discount = null;
         if (couponCode) {
-            try {
-                const cop = await this.validateCoupon(couponCode, subtotal);
-                discount = {
-                    code: cop.code,
-                    amount: cop.amount,
-                    type: cop.type,
-                    id: cop.id // Internal use
-                };
-                currentTotal -= discount.amount;
-            } catch (e) {
-                // Ignore invalid coupons during calculation, or throw if strict?
-                // For now, valid code lets it pass, invalid ignores it.
-                // In a real app we might want to return an error state.
-                console.warn("Coupon validation failed:", e);
-            }
+            const cop = await this.validateCoupon(couponCode, subtotal);
+            discount = {
+                code: cop.code,
+                amount: cop.amount,
+                type: cop.type,
+                id: cop.id // Internal use
+            };
+            currentTotal -= discount.amount;
         }
 
         // 3. Apply Delivery
@@ -118,10 +286,15 @@ export class CheckoutService {
                 .single();
 
             if (delOption) {
+                const context = await this.buildDeliveryPricingContext(items.map((item) => ({
+                    productId: item.productId,
+                    quantity: item.quantity,
+                })));
+                const amount = this.resolveDeliveryAmount(delOption, context);
                 delivery = {
                     id: delOption.id,
                     label: delOption.label,
-                    amount: delOption.amount
+                    amount,
                 };
                 currentTotal += delivery.amount;
             }
@@ -138,10 +311,6 @@ export class CheckoutService {
 
         const charges = [];
         if (chargeOptions) {
-            // Determine taxable base. Usually (Subtotal - Discount).
-            // Sometimes delivery is taxable too. Let's assume (Subtotal - Discount) for now.
-            const taxableBase = Math.max(0, subtotal - (discount?.amount || 0));
-
             for (const opt of chargeOptions) {
                 let amount = 0;
                 if (opt.calc_type === 'percent') {
@@ -173,7 +342,7 @@ export class CheckoutService {
         return {
             subtotal,
             delivery,
-            discount: discount ? { code: discount.code, amount: discount.amount, type: discount.type } : null,
+            discount: discount ? { id: discount.id, code: discount.code, amount: discount.amount, type: discount.type } : null,
             charges: charges.map(c => ({ id: c.id, label: c.label, amount: c.amount, type: c.type, calc_type: c.calc_type, raw_value: c.raw_value })),
             total: Math.max(0, currentTotal) // Prevent negative total
         };

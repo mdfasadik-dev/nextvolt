@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2, Loader2, Eye } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import type { Product } from "@/lib/services/productService";
 import { ProductCombobox, type ProductOption } from "@/components/ui/product-combobox";
 
@@ -256,7 +256,7 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
                             <DialogTitle>Inventory Detail</DialogTitle>
                             <button onClick={closeView} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
                         </DialogHeader>
-                        <DialogBody className="space-y-4 text-sm">
+                        <div className="py-4 space-y-4 text-sm">
                             {viewing && (
                                 <>
                                     <div>
@@ -278,7 +278,7 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
                                     </div>
                                 </>
                             )}
-                        </DialogBody>
+                        </div>
                         <DialogFooter>
                             <button onClick={closeView} className="text-xs rounded-md border px-3 py-1">Close</button>
                         </DialogFooter>

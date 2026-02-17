@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import Image from "next/image";
 import { Markdown } from '@/components/markdown';
 import { fetchVariantDetail, VariantDetail } from "../detail-actions";
@@ -37,7 +37,7 @@ export function VariantDetailDialog({ id, onClose }: Props) {
                         Close
                     </button>
                 </DialogHeader>
-                <DialogBody className="space-y-4">
+                <div className="py-4 space-y-4">
                     {loading && <p className="text-xs text-muted-foreground">Loading…</p>}
                     {!loading && detail?.image_url && (
                         <div className="flex justify-center mb-2">
@@ -77,7 +77,7 @@ export function VariantDetailDialog({ id, onClose }: Props) {
                             </div>
                         </div>
                     )}
-                </DialogBody>
+                </div>
                 <DialogFooter>
                     <button
                         onClick={onClose}

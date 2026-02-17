@@ -13,7 +13,7 @@ import { WarningDialog } from "@/components/ui/warning-dialog";
 
 export interface CategoryFormProps {
     initial?: Partial<Category>;
-    onSubmit: (data: { name: string; slug: string | null; is_active: boolean; parent_id: string | null; image_url?: string | null }) => Promise<void> | void;
+    onSubmit: (data: { name: string; slug: string | null; is_active: boolean; parent_id: string | null; image_url?: string | null; sort_order?: number }) => Promise<void> | void;
     submitting?: boolean;
     parents: Category[];
 }
@@ -71,7 +71,14 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
                     if (removalRequested && existingImageUrl) { finalUrl = null; deleteOld = true; }
                     if (pickedFile) { setUploading(true); const { publicUrl } = await StorageService.uploadEntityImage('categories', pickedFile); if (existingImageUrl && existingImageUrl !== publicUrl) deleteOld = true; finalUrl = publicUrl; }
                 } finally { setUploading(false); }
-                await onSubmit({ name, slug: (slug || autoSlug) || null, is_active: isActive, parent_id: parentId || null, image_url: finalUrl || null });
+                await onSubmit({
+                    name,
+                    slug: (slug || autoSlug) || null,
+                    is_active: isActive,
+                    parent_id: parentId || null,
+                    image_url: finalUrl || null,
+                    sort_order: Number.isFinite(initial?.sort_order) ? Number(initial?.sort_order) : undefined,
+                });
                 if (!initial?.id) {
                     setPickedFile(null); setExistingImageUrl(null); setRemovalRequested(false); setPreviewUrl(null);
                 }

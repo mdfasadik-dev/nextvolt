@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type MouseEvent } from 'react';
 import Image from 'next/image';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Markdown } from '@/components/markdown';
 import { FileImage } from 'lucide-react';
 import { AddToCartButton } from '@/components/cart/add-to-cart-button';
+import { ProductBadgePill } from '@/components/products/product-badge-pill';
 
 interface VariantItem { id: string; title: string | null; sku: string | null; image_url: string | null; minPrice: number | null; maxPrice: number | null; minOriginalPrice?: number | null; maxOriginalPrice?: number | null; totalQty?: number | null; unit?: string | null; details_md?: string | null }
 
@@ -22,6 +23,8 @@ interface Props {
     productName: string;
     brand?: string | null;
     mainImageUrl?: string | null;
+    imageUrls?: string[];
+    badge?: { label: string; color: string } | null;
     description?: string | null;
     attributes: AttributeItem[];
     baseQty: number | null;
@@ -30,11 +33,14 @@ interface Props {
     storePhone?: string | null;
 }
 
-export default function ProductDetailClient({ productId, productSlug, basePrice, basePriceValue, basePriceOriginal, variants, productName, brand, mainImageUrl, description, attributes, baseQty, baseUnit, productDetailsMd, storePhone }: Props) {
+export default function ProductDetailClient({ productId, productSlug, basePrice, basePriceValue, basePriceOriginal, variants, productName, brand, mainImageUrl, imageUrls = [], badge = null, description, attributes, baseQty, baseUnit, productDetailsMd, storePhone }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathname = usePathname();
     const [selected, setSelected] = useState<string | null>(null);
+    const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
+    const [zoomActive, setZoomActive] = useState(false);
+    const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 });
 
     // Initialize / sync selection from URL (supports back/forward navigation)
     useEffect(() => {
@@ -104,7 +110,38 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
     }, [selected, variants, basePrice, symbol]);
 
     const activeVariant = selected ? variants.find(v => v.id === selected) : null;
-    const displayImage = activeVariant?.image_url || mainImageUrl;
+    const galleryImages = useMemo(() => {
+        const deduped: string[] = [];
+        const seen = new Set<string>();
+        const add = (url?: string | null) => {
+            if (!url) return;
+            if (seen.has(url)) return;
+            seen.add(url);
+            deduped.push(url);
+        };
+        add(activeVariant?.image_url);
+        imageUrls.forEach(add);
+        add(mainImageUrl);
+        return deduped;
+    }, [activeVariant?.image_url, imageUrls, mainImageUrl]);
+
+    useEffect(() => {
+        if (!galleryImages.length) {
+            if (activeImageUrl !== null) setActiveImageUrl(null);
+            return;
+        }
+        if (!activeImageUrl || !galleryImages.includes(activeImageUrl)) {
+            setActiveImageUrl(galleryImages[0]);
+        }
+    }, [galleryImages, activeImageUrl]);
+
+    useEffect(() => {
+        if (activeVariant?.image_url) {
+            setActiveImageUrl(activeVariant.image_url);
+        }
+    }, [activeVariant?.image_url]);
+
+    const displayImage = activeImageUrl || galleryImages[0] || null;
     const hasVariants = variants.length > 0;
     const cartVariant = hasVariants ? activeVariant : null;
     const cartPrice = cartVariant
@@ -125,22 +162,72 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
         return `https://wa.me/${waDigits}?text=${msg}`;
     }
 
+    function handleImageMouseMove(event: MouseEvent<HTMLDivElement>) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * 100;
+        const y = ((event.clientY - rect.top) / rect.height) * 100;
+        setZoomOrigin({
+            x: Math.max(0, Math.min(100, x)),
+            y: Math.max(0, Math.min(100, y)),
+        });
+    }
+
     return (
         <>
             <div className="grid gap-10 md:grid-cols-2">
-                <div className="relative w-full aspect-square rounded-lg overflow-hidden">
-                    {displayImage ? (
-                        <Image
-                            src={displayImage}
-                            alt={productName}
-                            fill
-                            priority={false}
-                            sizes="(max-width:768px) 100vw, 50vw"
-                            className="absolute inset-0 object-cover"
-                        />
-                    ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground">
-                            <FileImage className='h-8 w-8 text-gray-400' />
+                <div className="space-y-3">
+                    <div
+                        className="relative w-full aspect-square rounded-lg overflow-hidden border bg-muted/20"
+                        onMouseEnter={() => setZoomActive(true)}
+                        onMouseLeave={() => setZoomActive(false)}
+                        onMouseMove={handleImageMouseMove}
+                    >
+                        {displayImage ? (
+                            <Image
+                                src={displayImage}
+                                alt={productName}
+                                fill
+                                priority={false}
+                                sizes="(max-width:768px) 100vw, 50vw"
+                                className={cn(
+                                    "absolute inset-0 object-contain transition-transform duration-150",
+                                    zoomActive ? "scale-[1.9]" : "scale-100"
+                                )}
+                                style={{ transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%` }}
+                            />
+                        ) : (
+                            <div className="absolute inset-0 flex items-center justify-center text-[11px] text-muted-foreground">
+                                <FileImage className='h-8 w-8 text-gray-400' />
+                            </div>
+                        )}
+                        {badge?.label ? <ProductBadgePill className='absolute top-4 left-4 z-10' label={badge.label} color={badge.color} /> : null}
+                    </div>
+                    {galleryImages.length > 1 && (
+                        <div className="grid grid-cols-5 gap-2">
+                            {galleryImages.map((imageUrl, index) => {
+                                const active = imageUrl === displayImage;
+                                return (
+                                    <button
+                                        key={`${imageUrl}-${index}`}
+                                        type="button"
+                                        onClick={() => setActiveImageUrl(imageUrl)}
+                                        className={cn(
+                                            "relative aspect-square overflow-hidden rounded border bg-muted/20 transition",
+                                            active ? "border-primary ring-2 ring-primary/20" : "hover:border-primary/50"
+                                        )}
+                                        aria-label={`View image ${index + 1}`}
+                                        aria-pressed={active}
+                                    >
+                                        <Image
+                                            src={imageUrl}
+                                            alt={`${productName} thumbnail ${index + 1}`}
+                                            fill
+                                            sizes="96px"
+                                            className="object-cover"
+                                        />
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

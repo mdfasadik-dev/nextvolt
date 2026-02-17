@@ -1,8 +1,13 @@
 import { StoreService } from '@/lib/services/storeService';
+import Link from "next/link";
+import { ContentPageService } from "@/lib/services/contentPageService";
 
 export async function Footer() {
     const year = new Date().getFullYear();
-    const store = await StoreService.getFirst();
+    const [store, footerPages] = await Promise.all([
+        StoreService.getFirst(),
+        ContentPageService.listPublicFooter(),
+    ]);
     const addressParts = [store?.address, store?.city, store?.state, store?.postal_code, store?.country].filter(Boolean).join(', ');
     const hasHours = store?.opening_hours && typeof store.opening_hours === 'object';
     const hasCoords = typeof store?.latitude === 'number' && typeof store?.longitude === 'number';
@@ -19,9 +24,15 @@ export async function Footer() {
         if (/^https?:\/\//i.test(u)) return u;
         return `https://${u}`;
     }
+    type OpeningHoursSlot = { open?: string; close?: string };
+    type OpeningHoursMap = Record<string, OpeningHoursSlot[]>;
+    const normalizedHours: OpeningHoursMap =
+        hasHours && store?.opening_hours && typeof store.opening_hours === "object" && !Array.isArray(store.opening_hours)
+            ? (store.opening_hours as OpeningHoursMap)
+            : {};
     const websiteHref = normalizeUrl(store?.website_url);
     return (
-        <footer className="mt-24 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 text-sm">
+        <footer className="border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 text-sm">
             <div className={`max-w-6xl mx-auto px-6 py-14 grid gap-10 ${hasHours && hasCoords ? 'md:grid-cols-4' : (hasHours || hasCoords) ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
                 <div className="space-y-3">
                     <span className="text-lg font-bold tracking-tight">{store?.name || 'Store'}</span>
@@ -63,10 +74,14 @@ export async function Footer() {
                 {hasHours && <div className="space-y-3">
                     <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Hours</h3>
                     <ul className="text-xs space-y-1 text-muted-foreground">
-                        {Object.entries(store.opening_hours as any).map(([day, slots]: any) => (
+                        {Object.entries(normalizedHours).map(([day, slots]) => (
                             <li key={day} className="flex gap-2">
                                 <span className="w-14 capitalize">{day}</span>
-                                <span>{Array.isArray(slots) && slots.length > 0 ? slots.map((s: any) => `${s.open}-${s.close}`).join(', ') : 'Closed'}</span>
+                                <span>
+                                    {Array.isArray(slots) && slots.length > 0
+                                        ? slots.map((slot) => `${slot.open || "00:00"}-${slot.close || "00:00"}`).join(", ")
+                                        : "Closed"}
+                                </span>
                             </li>
                         ))}
                     </ul>
@@ -86,6 +101,20 @@ export async function Footer() {
                 </div>}
                 <div className="space-y-1">
                     <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Legal</h3>
+                    {footerPages.length > 0 ? (
+                        <ul className="space-y-1 pb-2">
+                            {footerPages.map((page) => (
+                                <li key={page.id}>
+                                    <Link
+                                        href={`/${page.slug}`}
+                                        className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                                    >
+                                        {page.title}
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : null}
                     <p className="text-[10px] text-muted-foreground">© {year} {store?.name || 'Store'}.</p>
                     <p className="text-[10px] text-muted-foreground">
                         Developed by {" "}

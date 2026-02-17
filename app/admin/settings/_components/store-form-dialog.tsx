@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -126,7 +126,7 @@ export function StoreFormDialog({ open, onOpenChange, editing, onCreate, onUpdat
                     <DialogTitle>{editing ? 'Edit Store' : 'New Store'}</DialogTitle>
                     <button onClick={() => onOpenChange(false)} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
                 </DialogHeader>
-                <DialogBody>
+                <div className="py-4">
                     <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2" id="store-form">
                         <div className="space-y-1 md:col-span-2">
                             <label className="text-xs">Name</label>
@@ -151,7 +151,7 @@ export function StoreFormDialog({ open, onOpenChange, editing, onCreate, onUpdat
                         <div className="space-y-1"><label className="text-xs">Logo (Light)</label><div className="flex items-center gap-3">{!remRemoveLight && (pickedLight || logoLight) ? (<div className="relative w-16 h-16 border rounded bg-muted overflow-hidden"><Image src={(pickedLight ? URL.createObjectURL(pickedLight) : logoLight)!} alt="logo light" fill sizes="64px" className="object-contain" /></div>) : (<div className="w-16 h-16 border rounded flex items-center justify-center text-[10px] text-muted-foreground">{remRemoveLight ? 'Removed' : 'None'}</div>)}<Button type="button" size="sm" variant="secondary" onClick={() => pickFile('light')} disabled={uploading}><ImagePlus className="w-3 h-3 mr-1" />{pickedLight ? 'Change' : (logoLight ? 'Replace' : 'Select')}</Button>{(logoLight || pickedLight) && !uploading && <Button type="button" size="sm" variant="ghost" onClick={() => { if (pickedLight) setPickedLight(null); if (logoLight) setRemRemoveLight(true); }}><Trash2 className="w-3 h-3 mr-1" />Remove</Button>}</div>{remRemoveLight && <p className="text-[10px] text-amber-600">Will remove on save.</p>}</div>
                         <div className="space-y-1"><label className="text-xs">Logo (Dark)</label><div className="flex items-center gap-3">{!remRemoveDark && (pickedDark || logoDark) ? (<div className="relative w-16 h-16 border rounded bg-muted overflow-hidden"><Image src={(pickedDark ? URL.createObjectURL(pickedDark) : logoDark)!} alt="logo dark" fill sizes="64px" className="object-contain" /></div>) : (<div className="w-16 h-16 border rounded flex items-center justify-center text-[10px] text-muted-foreground">{remRemoveDark ? 'Removed' : 'None'}</div>)}<Button type="button" size="sm" variant="secondary" onClick={() => pickFile('dark')} disabled={uploading}><ImagePlus className="w-3 h-3 mr-1" />{pickedDark ? 'Change' : (logoDark ? 'Replace' : 'Select')}</Button>{(logoDark || pickedDark) && !uploading && <Button type="button" size="sm" variant="ghost" onClick={() => { if (pickedDark) setPickedDark(null); if (logoDark) setRemRemoveDark(true); }}><Trash2 className="w-3 h-3 mr-1" />Remove</Button>}</div>{remRemoveDark && <p className="text-[10px] text-amber-600">Will remove on save.</p>}</div>
                     </form>
-                </DialogBody>
+                </div>
                 <DialogFooter>
                     <button onClick={() => onOpenChange(false)} className="text-xs rounded-md border px-3 py-1">Cancel</button>
                     <Button form="store-form" type="submit" disabled={isPending || uploading} className="text-xs">{(isPending || uploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}{editing ? ((isPending || uploading) ? 'Updating' : 'Update') : ((isPending || uploading) ? 'Creating' : 'Create')}</Button>

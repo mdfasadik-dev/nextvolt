@@ -2,7 +2,6 @@ import "server-only";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { Tables, TablesInsert, TablesUpdate } from "@/lib/types/supabase";
 import { SUPABASE_SERVICE_ROLE_KEY } from "@/lib/env";
-import { ORDER_STATUS_OPTIONS } from "@/lib/constants/order-status";
 import type { OrderStatus } from "@/lib/constants/order-status";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/supabase";
@@ -13,7 +12,7 @@ export type OrderUpdate = TablesUpdate<"orders">;
 export type OrderChargeInsert = TablesInsert<"order_charges">;
 
 const envCurrencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
-const INVENTORY_STATUSES = new Set<OrderStatus>(["paid", "shipped", "completed"]);
+const INVENTORY_STATUSES = new Set<OrderStatus>(["accepted", "shipped", "completed"]);
 
 export interface OrderSummary {
     id: string;
@@ -72,11 +71,30 @@ export interface OrderDetail extends OrderSummary {
 export interface OrderListResult {
     orders: OrderSummary[];
     counts: Record<OrderStatus | "all", number>;
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
 }
 
-type EnrichedOrderSummary = OrderSummary & {
-    shippingContact: ContactDetails;
-    billingContact: ContactDetails;
+type OrderSummaryRow = {
+    id: string;
+    created_at: string;
+    status: string;
+    subtotal_amount: number;
+    total_amount: number;
+    currency: string;
+    notes: string | null;
+    shipping_address: unknown;
+    billing_address: unknown;
+    order_items: Array<{ id: string }> | null;
+    order_charges: Array<{ type: "charge" | "discount"; applied_amount: number; delivery_id: string | null }> | null;
+};
+
+type OrderListCandidateRow = {
+    id: string;
+    status: OrderStatus;
+    created_at: string;
 };
 
 function extractContactDetails(data: unknown): ContactDetails {
@@ -129,11 +147,30 @@ export class OrderService {
         });
     }
 
-    static async listSummaries(filters: { status?: OrderStatus | "all"; search?: string } = {}): Promise<OrderListResult> {
+    static async listSummaries(filters: {
+        status?: OrderStatus | "all";
+        search?: string;
+        page?: number;
+        pageSize?: number;
+    } = {}): Promise<OrderListResult> {
         return this.wrap(async () => {
             const client = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
-            // Select order_charges to calculate shipping/discounts on the fly
-            const { data, error } = await client
+            const pageSize = Math.min(Math.max(filters.pageSize ?? 20, 5), 100);
+            const page = Math.max(filters.page ?? 1, 1);
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+            const searchTerm = filters.search?.trim();
+
+            if (searchTerm && this.isLikelyOrderIdFragment(searchTerm)) {
+                return this.listSummariesByIdFragment(client, {
+                    status: filters.status,
+                    search: searchTerm,
+                    page,
+                    pageSize,
+                });
+            }
+
+            let listQuery = client
                 .from("orders")
                 .select(`
                     id, 
@@ -147,87 +184,238 @@ export class OrderService {
                     billing_address, 
                     order_items (id),
                     order_charges (type, applied_amount, delivery_id)
-                `)
-                .order("created_at", { ascending: false });
+                `, { count: "exact" });
+
+            if (filters.status && filters.status !== "all") {
+                listQuery = listQuery.eq("status", filters.status);
+            }
+
+            if (searchTerm) {
+                listQuery = this.applyOrderSearchFilter(listQuery, searchTerm);
+            }
+
+            const { data, error, count } = await listQuery
+                .order("created_at", { ascending: false })
+                .range(from, to);
 
             if (error) throw error;
 
-            const summaries: EnrichedOrderSummary[] = (data || []).map(row => {
-                const shippingContact = extractContactDetails(row.shipping_address);
-                const billingContact = extractContactDetails(row.billing_address);
+            const summaries: OrderSummary[] = (data || []).map(row => this.mapSummaryRow(row as OrderSummaryRow));
 
-                // Aggregate charges
-                let discountAmount = 0;
-                let shippingAmount = 0;
-
-                if (Array.isArray(row.order_charges)) {
-                    for (const charge of row.order_charges) {
-                        if (charge.type === 'discount') {
-                            discountAmount += charge.applied_amount;
-                        } else if (charge.type === 'charge') {
-                            // Assuming all charges are shipping/delivery for now or checking a flag
-                            // Use delivery_id presence as heuristic for shipping OR just treat all charges as 'shipping/extra' for summary view
-                            shippingAmount += charge.applied_amount;
-                        }
-                    }
-                }
-
-                return {
-                    id: row.id,
-                    createdAt: row.created_at,
-                    status: row.status as OrderStatus,
-                    subtotalAmount: row.subtotal_amount,
-                    discountAmount,
-                    shippingAmount,
-                    totalAmount: row.total_amount,
-                    currency: row.currency,
-                    currencySymbol: envCurrencySymbol,
-                    notes: row.notes ?? null,
-                    customerName: shippingContact.name,
-                    customerEmail: shippingContact.email,
-                    customerPhone: shippingContact.phone,
-                    itemsCount: Array.isArray(row.order_items) ? row.order_items.length : 0,
-                    shippingContact,
-                    billingContact,
-                };
-            });
-
-            const counts: Record<OrderStatus | "all", number> = { all: 0, pending: 0, paid: 0, shipped: 0, completed: 0, cancelled: 0 };
-            for (const summary of summaries) {
-                counts[summary.status] = (counts[summary.status] ?? 0) + 1;
-                counts.all += 1;
-            }
-
-            let filtered = summaries;
-            if (filters.status && filters.status !== "all") {
-                filtered = filtered.filter(order => order.status === filters.status);
-            }
-
-            if (filters.search) {
-                const term = filters.search.trim().toLowerCase();
-                if (term.length) {
-                    filtered = filtered.filter(order => {
-                        const haystack = [
-                            order.id,
-                            order.customerName ?? "",
-                            order.customerEmail ?? "",
-                            order.customerPhone ?? "",
-                            order.notes ?? "",
-                            order.shippingContact.addressLines.join(" "),
-                            order.billingContact.addressLines.join(" "),
-                        ]
-                            .join(" ")
-                            .toLowerCase();
-                        return haystack.includes(term);
-                    });
-                }
-            }
+            const counts = await this.getOrderCounts(client, searchTerm);
+            const total = count ?? 0;
+            const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
             return {
-                orders: filtered.map(({ shippingContact: _s, billingContact: _b, ...rest }) => rest as OrderSummary),
+                orders: summaries,
                 counts,
+                page,
+                pageSize,
+                total,
+                totalPages,
             };
         });
+    }
+
+    private static sanitizeSearchInput(input: string) {
+        return input.replace(/[%*,#]/g, " ").trim();
+    }
+
+    private static isFullUuid(input: string) {
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input);
+    }
+
+    private static isLikelyOrderIdFragment(input: string) {
+        const search = this.sanitizeSearchInput(input).toLowerCase();
+        if (!search || search.length < 4) return false;
+        if (this.isFullUuid(search)) return false;
+        return /^[0-9a-f-]+$/.test(search) && /[a-f-]/.test(search);
+    }
+
+    private static emptyCounts(): Record<OrderStatus | "all", number> {
+        return {
+            all: 0,
+            pending: 0,
+            accepted: 0,
+            shipped: 0,
+            completed: 0,
+            cancelled: 0,
+        };
+    }
+
+    private static mapSummaryRow(row: OrderSummaryRow): OrderSummary {
+        const shippingContact = extractContactDetails(row.shipping_address);
+        let discountAmount = 0;
+        let shippingAmount = 0;
+
+        if (Array.isArray(row.order_charges)) {
+            for (const charge of row.order_charges) {
+                if (charge.type === "discount") {
+                    discountAmount += charge.applied_amount;
+                } else if (charge.type === "charge") {
+                    shippingAmount += charge.applied_amount;
+                }
+            }
+        }
+
+        return {
+            id: row.id,
+            createdAt: row.created_at,
+            status: row.status as OrderStatus,
+            subtotalAmount: row.subtotal_amount,
+            discountAmount,
+            shippingAmount,
+            totalAmount: row.total_amount,
+            currency: row.currency,
+            currencySymbol: envCurrencySymbol,
+            notes: row.notes ?? null,
+            customerName: shippingContact.name,
+            customerEmail: shippingContact.email,
+            customerPhone: shippingContact.phone,
+            itemsCount: Array.isArray(row.order_items) ? row.order_items.length : 0,
+        };
+    }
+
+    private static async listSummariesByIdFragment(
+        client: SupabaseClient<Database>,
+        params: { status?: OrderStatus | "all"; search: string; page: number; pageSize: number },
+    ): Promise<OrderListResult> {
+        const fragment = this.sanitizeSearchInput(params.search).toLowerCase();
+
+        const { data: candidates, error: candidateError } = await client
+            .from("orders")
+            .select("id,status,created_at")
+            .order("created_at", { ascending: false });
+
+        if (candidateError) throw candidateError;
+
+        const allMatches = ((candidates || []) as OrderListCandidateRow[]).filter(row =>
+            row.id.toLowerCase().includes(fragment),
+        );
+
+        const counts = this.emptyCounts();
+        for (const row of allMatches) {
+            counts.all += 1;
+            counts[row.status] += 1;
+        }
+
+        const scopedMatches =
+            params.status && params.status !== "all"
+                ? allMatches.filter(row => row.status === params.status)
+                : allMatches;
+
+        const total = scopedMatches.length;
+        const totalPages = Math.max(1, Math.ceil(total / params.pageSize));
+        const from = (params.page - 1) * params.pageSize;
+        const to = from + params.pageSize;
+        const pageIds = scopedMatches.slice(from, to).map(row => row.id);
+
+        if (pageIds.length === 0) {
+            return {
+                orders: [],
+                counts,
+                page: params.page,
+                pageSize: params.pageSize,
+                total,
+                totalPages,
+            };
+        }
+
+        const { data, error } = await client
+            .from("orders")
+            .select(`
+                id, 
+                created_at, 
+                status, 
+                subtotal_amount, 
+                total_amount, 
+                currency, 
+                notes, 
+                shipping_address, 
+                billing_address, 
+                order_items (id),
+                order_charges (type, applied_amount, delivery_id)
+            `)
+            .in("id", pageIds);
+
+        if (error) throw error;
+
+        const byId = new Map<string, OrderSummaryRow>(
+            ((data || []) as OrderSummaryRow[]).map(row => [row.id, row]),
+        );
+
+        const orders = pageIds
+            .map(id => byId.get(id))
+            .filter((row): row is OrderSummaryRow => !!row)
+            .map(row => this.mapSummaryRow(row));
+
+        return {
+            orders,
+            counts,
+            page: params.page,
+            pageSize: params.pageSize,
+            total,
+            totalPages,
+        };
+    }
+
+    private static applyOrderSearchFilter<T extends { or: (filter: string) => T }>(query: T, rawSearch: string): T {
+        const search = this.sanitizeSearchInput(rawSearch);
+        if (!search) return query;
+
+        const term = `%${search}%`;
+        const maybeUuid = this.isFullUuid(search);
+        const filters = [
+            `notes.ilike.${term}`,
+            `shipping_address->>name.ilike.${term}`,
+            `shipping_address->>fullName.ilike.${term}`,
+            `shipping_address->>full_name.ilike.${term}`,
+            `shipping_address->>email.ilike.${term}`,
+            `shipping_address->>phone.ilike.${term}`,
+            `billing_address->>name.ilike.${term}`,
+            `billing_address->>fullName.ilike.${term}`,
+            `billing_address->>full_name.ilike.${term}`,
+            `billing_address->>email.ilike.${term}`,
+            `billing_address->>phone.ilike.${term}`,
+        ];
+
+        if (maybeUuid) {
+            filters.unshift(`id.eq.${search}`);
+        }
+
+        return query.or(filters.join(","));
+    }
+
+    private static async getOrderCounts(
+        client: SupabaseClient<Database>,
+        searchTerm?: string,
+    ): Promise<Record<OrderStatus | "all", number>> {
+        const countForStatus = async (status?: OrderStatus) => {
+            let query = client.from("orders").select("id", { count: "exact", head: true });
+            if (status) query = query.eq("status", status);
+            if (searchTerm) query = this.applyOrderSearchFilter(query, searchTerm);
+            const { count, error } = await query;
+            if (error) throw error;
+            return count ?? 0;
+        };
+
+        const [all, pending, accepted, shipped, completed, cancelled] = await Promise.all([
+            countForStatus(undefined),
+            countForStatus("pending"),
+            countForStatus("accepted"),
+            countForStatus("shipped"),
+            countForStatus("completed"),
+            countForStatus("cancelled"),
+        ]);
+
+        return {
+            all,
+            pending,
+            accepted,
+            shipped,
+            completed,
+            cancelled,
+        };
     }
 
     static async getDetail(id: string, options: { useAdmin?: boolean } = {}): Promise<OrderDetail | null> {
@@ -279,13 +467,20 @@ export class OrderService {
                     } else if (charge.type === 'charge') {
                         shippingAmount += charge.applied_amount;
                     }
+                    const metadata =
+                        charge.metadata && typeof charge.metadata === "object" && !Array.isArray(charge.metadata)
+                            ? (charge.metadata as Record<string, unknown>)
+                            : null;
+
                     charges.push({
                         id: charge.id,
                         type: charge.type as "charge" | "discount",
                         calcType: charge.calc_type as "amount" | "percent",
                         baseAmount: charge.base_amount,
                         appliedAmount: charge.applied_amount,
-                        label: (charge.metadata as any)?.label || (charge.type === 'charge' ? 'Delivery' : 'Discount')
+                        label:
+                            (typeof metadata?.label === "string" ? metadata.label : null) ||
+                            (charge.type === "charge" ? "Delivery" : "Discount"),
                     });
                 }
             }

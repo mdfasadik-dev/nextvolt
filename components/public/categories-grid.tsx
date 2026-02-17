@@ -29,10 +29,10 @@ export function CategoriesGrid({ categories }: { categories: SimpleCategory[] })
     const canShowMore = visibleCount < categories.length;
 
     return (
-        <div className="w-full flex flex-col items-center">
-            <ul className="grid gap-8 grid-cols-4 sm:grid-cols-6 md:grid-cols-8 xl:grid-cols-10 justify-center">
+        <>
+            <ul className="flex w-full flex-wrap justify-center gap-8">
                 {visible.map((c) => (
-                    <li key={c.id} className="flex flex-col items-center text-center group animate-fade-in">
+                    <li key={c.id} className="group flex w-20 flex-col items-center text-center animate-fade-in sm:w-24">
                         <Link
                             href={`/categories/${c.slug || c.id}`}
                             className="relative flex h-20 w-20 items-center justify-center transition-transform duration-300 group-hover:scale-[1.1]"
@@ -76,6 +76,6 @@ export function CategoriesGrid({ categories }: { categories: SimpleCategory[] })
         @keyframes fade-in { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
         .animate-fade-in { animation: fade-in 0.35s ease both; }
       `}</style>
-        </div>
+        </>
     );
 }

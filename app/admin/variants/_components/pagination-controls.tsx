@@ -46,11 +46,11 @@ export function PaginationControls({
             <ul className="flex items-center gap-1">
                 {pages.map((p, i) =>
                     p === "…" ? (
-                        <li key={i} className="px-1 text-xs text-muted-foreground">
+                        <li key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">
                             …
                         </li>
                     ) : (
-                        <li key={p}>
+                        <li key={`page-${p}`}>
                             <button
                                 disabled={disabled || p === page}
                                 onClick={() => go(p)}

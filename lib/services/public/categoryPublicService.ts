@@ -14,6 +14,8 @@ export class CategoryPublicService {
             .from("categories")
             .select("*")
             .eq("is_active", true)
+            .eq("is_deleted", false)
+            .order("sort_order", { ascending: true })
             .order("created_at", { ascending: false });
         if (error) throw error;
         return data;

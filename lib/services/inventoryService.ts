@@ -15,23 +15,24 @@ export class InventoryService {
     static async list(): Promise<InventoryJoined[]> {
         return this.wrap(async () => {
             const c = await createClient();
-            const { data, error } = await c.from("inventory").select("*, products:product_id ( id, name ), product_variants:variant_id ( id, title, sku, product_id )").order("updated_at", { ascending: false });
+            const { data, error } = await c.from("inventory").select("*, products:product_id ( id, name, is_deleted ), product_variants:variant_id ( id, title, sku, product_id )").order("updated_at", { ascending: false });
             if (error) throw error;
             const rows = data as any[];
             // Collect product ids from variants where direct product is null
             const variantProductIds = Array.from(new Set(rows.filter(r => !r.products && r.product_variants?.product_id).map(r => r.product_variants.product_id)));
             let productMap: Record<string, { id: string; name: string }> = {};
             if (variantProductIds.length) {
-                const { data: prodRows, error: prodErr } = await c.from("products").select("id,name").in("id", variantProductIds);
+                const { data: prodRows, error: prodErr } = await c.from("products").select("id,name").eq("is_deleted", false).in("id", variantProductIds);
                 if (!prodErr && prodRows) {
                     productMap = Object.fromEntries(prodRows.map(p => [p.id, p]));
                 }
             }
-            return rows.map(row => ({
+            const normalized = rows.map(row => ({
                 ...(row as InventoryItem),
-                product: row.products ?? productMap[row.product_variants?.product_id] ?? null,
+                product: row.products && !row.products.is_deleted ? { id: row.products.id, name: row.products.name } : productMap[row.product_variants?.product_id] ?? null,
                 variant: row.product_variants ? { id: row.product_variants.id, title: row.product_variants.title, sku: row.product_variants.sku } : null,
             }));
+            return normalized.filter(item => !!item.product);
         });
     }
     static async listPaged(opts: { page: number; pageSize: number; search?: string }): Promise<{ rows: InventoryJoined[]; total: number; page: number; pageSize: number; }> {
@@ -40,21 +41,21 @@ export class InventoryService {
         const c = await createClient();
         const { data, error } = await c
             .from('inventory')
-            .select('*, products:product_id ( id, name ), product_variants:variant_id ( id, title, sku, product_id )')
+            .select('*, products:product_id ( id, name, is_deleted ), product_variants:variant_id ( id, title, sku, product_id )')
             .order('updated_at', { ascending: false });
         if (error) throw error;
         const rows = (data ?? []) as any[];
         const variantProductIds = Array.from(new Set(rows.filter(r => !r.products && r.product_variants?.product_id).map(r => r.product_variants.product_id)));
         let productMap: Record<string, { id: string; name: string }> = {};
         if (variantProductIds.length) {
-            const { data: prodRows, error: prodErr } = await c.from('products').select('id,name').in('id', variantProductIds);
+            const { data: prodRows, error: prodErr } = await c.from('products').select('id,name').eq("is_deleted", false).in('id', variantProductIds);
             if (!prodErr && prodRows) productMap = Object.fromEntries(prodRows.map(p => [p.id, p]));
         }
         const normalized = rows.map(row => ({
             ...(row as InventoryItem),
-            product: row.products ?? productMap[row.product_variants?.product_id] ?? null,
+            product: row.products && !row.products.is_deleted ? { id: row.products.id, name: row.products.name } : productMap[row.product_variants?.product_id] ?? null,
             variant: row.product_variants ? { id: row.product_variants.id, title: row.product_variants.title, sku: row.product_variants.sku } : null,
-        }));
+        })).filter(item => !!item.product);
         const term = search ? search.trim().toLowerCase() : '';
         const filtered = term.length
             ? normalized.filter(item => {

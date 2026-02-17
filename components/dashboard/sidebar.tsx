@@ -55,9 +55,9 @@ function SidebarClient() {
                         ))}
                     </div>
                 </nav>
-                <div className="p-3 border-t flex items-center gap-2 text-xs">
+                {/* <div className="p-3 border-t flex items-center gap-2 text-xs">
                     <Link href="/auth/login" className="text-xs underline hover:no-underline">Account</Link>
-                </div>
+                </div> */}
             </aside>
         </>
     );
@@ -81,7 +81,7 @@ function NavEntry({ item, activePath, closeMenu }: NavEntryProps) {
                 <item.icon className="size-4 text-muted-foreground group-hover:text-accent-foreground" />
                 <span>{item.title}</span>
                 {item.badge && (
-                    <span className="ml-auto inline-flex items-center rounded bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium">
+                    <span className="ml-auto inline-flex items-center bg-primary text-white px-2 py-0.5 text-xs font-semibold rounded-full">
                         {item.badge}
                     </span>
                 )}

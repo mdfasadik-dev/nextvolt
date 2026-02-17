@@ -45,7 +45,6 @@ export async function createAdminClient() {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY env var not set. Add it to enable privileged writes or create appropriate RLS policies.");
   }
   if (process.env.NODE_ENV !== 'production') {
-    // eslint-disable-next-line no-console
     console.log('[supabase][admin] using service role key length:', serviceKey.length);
   }
   return createSupabaseClient(SUPABASE_URL, serviceKey, {
@@ -56,5 +55,13 @@ export async function createAdminClient() {
         Authorization: `Bearer ${serviceKey}`,
       },
     },
+  });
+}
+
+// Server-side client for public/read-only data access without request cookies.
+// Useful for metadata, sitemap, and statically generated public pages.
+export function createPublicClient() {
+  return createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
   });
 }

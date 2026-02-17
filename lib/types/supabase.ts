@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.1"
   }
   graphql_public: {
     Tables: {
@@ -69,8 +69,10 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          is_deleted: boolean
           name: string
           parent_id: string | null
+          sort_order: number
           slug: string | null
         }
         Insert: {
@@ -78,8 +80,10 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_deleted?: boolean
           name: string
           parent_id?: string | null
+          sort_order?: number
           slug?: string | null
         }
         Update: {
@@ -87,8 +91,10 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_deleted?: boolean
           name?: string
           parent_id?: string | null
+          sort_order?: number
           slug?: string | null
         }
         Relationships: [
@@ -166,6 +172,54 @@ export type Database = {
           metadata?: Json | null
           sort_order?: number
           type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      content_pages: {
+        Row: {
+          content_md: string
+          created_at: string
+          id: string
+          is_active: boolean
+          metadata: Json | null
+          seo_description: string | null
+          seo_title: string | null
+          show_in_footer: boolean
+          slug: string
+          sort_order: number
+          summary: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content_md?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          seo_description?: string | null
+          seo_title?: string | null
+          show_in_footer?: boolean
+          slug: string
+          sort_order?: number
+          summary?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content_md?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          metadata?: Json | null
+          seo_description?: string | null
+          seo_title?: string | null
+          show_in_footer?: boolean
+          slug?: string
+          sort_order?: number
+          summary?: string | null
+          title?: string
           updated_at?: string
         }
         Relationships: []
@@ -250,6 +304,68 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      delivery_weight_rules: {
+        Row: {
+          base_charge: number
+          base_weight_grams: number
+          created_at: string
+          delivery_id: string
+          id: string
+          increment_rounding: string
+          incremental_charge: number
+          incremental_unit_grams: number
+          is_active: boolean
+          label: string | null
+          max_weight_grams: number | null
+          metadata: Json | null
+          min_weight_grams: number
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          base_charge?: number
+          base_weight_grams?: number
+          created_at?: string
+          delivery_id: string
+          id?: string
+          increment_rounding?: string
+          incremental_charge?: number
+          incremental_unit_grams?: number
+          is_active?: boolean
+          label?: string | null
+          max_weight_grams?: number | null
+          metadata?: Json | null
+          min_weight_grams?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          base_charge?: number
+          base_weight_grams?: number
+          created_at?: string
+          delivery_id?: string
+          id?: string
+          increment_rounding?: string
+          incremental_charge?: number
+          incremental_unit_grams?: number
+          is_active?: boolean
+          label?: string | null
+          max_weight_grams?: number | null
+          metadata?: Json | null
+          min_weight_grams?: number
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_weight_rules_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "delivery"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory: {
         Row: {
@@ -451,6 +567,7 @@ export type Database = {
           customer_id: string | null
           id: string
           notes: string | null
+          order_items_snapshot: Json
           shipping_address: Json | null
           status: Database["public"]["Enums"]["order_status"]
           subtotal_amount: number
@@ -463,6 +580,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           notes?: string | null
+          order_items_snapshot?: Json
           shipping_address?: Json | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_amount?: number
@@ -475,6 +593,7 @@ export type Database = {
           customer_id?: string | null
           id?: string
           notes?: string | null
+          order_items_snapshot?: Json
           shipping_address?: Json | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal_amount?: number
@@ -520,6 +639,88 @@ export type Database = {
           },
           {
             foreignKeyName: "product_attribute_values_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_badges: {
+        Row: {
+          color: string
+          created_at: string
+          ends_at: string | null
+          id: string
+          is_active: boolean
+          label: string
+          product_id: string
+          starts_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          product_id: string
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          ends_at?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          product_id?: string
+          starts_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_badges_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_images: {
+        Row: {
+          alt_text: string | null
+          created_at: string
+          id: string
+          image_url: string
+          is_primary: boolean
+          product_id: string
+          sort_order: number
+        }
+        Insert: {
+          alt_text?: string | null
+          created_at?: string
+          id?: string
+          image_url: string
+          is_primary?: boolean
+          product_id: string
+          sort_order?: number
+        }
+        Update: {
+          alt_text?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_primary?: boolean
+          product_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_images_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
@@ -577,10 +778,13 @@ export type Database = {
           details_md: string | null
           id: string
           is_active: boolean
+          is_deleted: boolean
           is_featured: boolean
           main_image_url: string | null
           name: string
+          sort_order: number
           slug: string | null
+          weight_grams: number
         }
         Insert: {
           brand?: string | null
@@ -590,10 +794,13 @@ export type Database = {
           details_md?: string | null
           id?: string
           is_active?: boolean
+          is_deleted?: boolean
           is_featured?: boolean
           main_image_url?: string | null
           name: string
+          sort_order?: number
           slug?: string | null
+          weight_grams?: number
         }
         Update: {
           brand?: string | null
@@ -603,10 +810,13 @@ export type Database = {
           details_md?: string | null
           id?: string
           is_active?: boolean
+          is_deleted?: boolean
           is_featured?: boolean
           main_image_url?: string | null
           name?: string
+          sort_order?: number
           slug?: string | null
+          weight_grams?: number
         }
         Relationships: [
           {
@@ -793,11 +1003,38 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      admin_customers_all: {
+        Args: { p_search?: string }
+        Returns: {
+          email: string
+          latest_order_at: string
+          latest_order_id: string
+          name: string
+          orders_count: number
+          phone: string
+        }[]
+      }
+      admin_customers_page: {
+        Args: { p_page?: number; p_page_size?: number; p_search?: string }
+        Returns: {
+          email: string
+          latest_order_at: string
+          latest_order_id: string
+          name: string
+          orders_count: number
+          phone: string
+          total_count: number
+        }[]
+      }
     }
     Enums: {
       attribute_data_type: "text" | "number" | "boolean" | "select"
-      order_status: "pending" | "paid" | "shipped" | "completed" | "cancelled"
+      order_status:
+        | "pending"
+        | "accepted"
+        | "shipped"
+        | "completed"
+        | "cancelled"
       promotion_type: "carousel" | "banner" | "hero" | "popup" | "custom"
     }
     CompositeTypes: {
@@ -930,7 +1167,13 @@ export const Constants = {
   public: {
     Enums: {
       attribute_data_type: ["text", "number", "boolean", "select"],
-      order_status: ["pending", "paid", "shipped", "completed", "cancelled"],
+      order_status: [
+        "pending",
+        "accepted",
+        "shipped",
+        "completed",
+        "cancelled",
+      ],
       promotion_type: ["carousel", "banner", "hero", "popup", "custom"],
     },
   },

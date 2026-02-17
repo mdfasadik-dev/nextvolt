@@ -1,3 +1,12 @@
 Development,
-
 DB_Paswword: nextvolt224130
+
+Production Supabase Creds:
+email: sharifulislam390090@gmail.com
+password: Rajmi!44
+
+
+Production Supabase Server:
+
+IP Address: 165.22.104.226
+Password: next@2025Volt

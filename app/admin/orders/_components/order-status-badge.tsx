@@ -5,7 +5,7 @@ import type { OrderStatus } from "@/lib/constants/order-status";
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
     pending: "Pending",
-    paid: "Paid",
+    accepted: "Accepted",
     shipped: "Shipped",
     completed: "Completed",
     cancelled: "Cancelled",
@@ -13,7 +13,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 
 const STATUS_VARIANTS: Record<OrderStatus, "default" | "secondary" | "destructive" | "outline"> = {
     pending: "outline",
-    paid: "secondary",
+    accepted: "secondary",
     shipped: "outline",
     completed: "default",
     cancelled: "destructive",

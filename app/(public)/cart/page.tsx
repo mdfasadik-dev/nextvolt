@@ -1,8 +1,13 @@
 import { CartView } from "@/components/cart/cart-view";
+import type { Metadata } from "next";
+import { buildPageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata: Metadata = buildPageMetadata({
     title: "Your Cart",
-};
+    description: "Review products in your cart before checkout.",
+    pathname: "/cart",
+    noIndex: true,
+});
 
 export default function CartPage() {
     return (

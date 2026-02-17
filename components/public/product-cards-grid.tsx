@@ -7,15 +7,17 @@ import { FileImage } from "lucide-react";
 import type { Product } from "@/lib/services/productService";
 import type { PriceMap } from "@/lib/services/pricing";
 import { AddToCartButton } from "@/components/cart/add-to-cart-button";
+import { ProductBadgePill } from "@/components/products/product-badge-pill";
 
 interface Props {
     products: Product[];
     priceMap: PriceMap;
+    badgeMap?: Record<string, { label: string; color: string } | null>;
     symbol?: string;
     className?: string;
 }
 
-export function ProductCardsGrid({ products, priceMap, symbol = "$", className = "" }: Props) {
+export function ProductCardsGrid({ products, priceMap, badgeMap = {}, symbol = "$", className = "" }: Props) {
     if (!products.length) return null;
     return (
         <ul className={"grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 " + className}>
@@ -77,15 +79,17 @@ export function ProductCardsGrid({ products, priceMap, symbol = "$", className =
                                             <FileImage className="h-8 w-8 text-gray-400" />
                                         </div>
                                     )}
+                                    {badgeMap[p.id]?.label ? (
+                                        <ProductBadgePill
+                                            label={badgeMap[p.id]!.label}
+                                            color={badgeMap[p.id]!.color}
+                                            className="absolute top-2 left-2 z-10"
+                                        />
+                                    ) : null}
                                     {pricing && pricing.maxDiscountPercent > 0 && (
                                         <span className="absolute top-2 right-2 z-10 inline-flex items-center rounded-full bg-destructive px-2 py-0.5 text-[11px] font-semibold leading-none text-destructive-foreground shadow-sm">
                                             -{Math.round(pricing.maxDiscountPercent)}%
                                             <span className="sr-only"> discount</span>
-                                        </span>
-                                    )}
-                                    {p.brand && (
-                                        <span className="absolute top-2 left-2 z-10 inline-flex items-center rounded bg-muted/80 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide backdrop-blur">
-                                            {p.brand}
                                         </span>
                                     )}
                                 </div>
@@ -98,8 +102,12 @@ export function ProductCardsGrid({ products, priceMap, symbol = "$", className =
                                     >
                                         {p.name}
                                     </Link>
-                                    {/* {p.brand && <span className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5 shrink-0">{p.brand}</span>} */}
                                 </div>
+                                {p.brand && (
+                                    <div className="text-[11px] uppercase tracking-wide font-medium text-muted-foreground">
+                                        {p.brand}
+                                    </div>
+                                )}
                                 {p.description && (
                                     <p className="text-xs text-muted-foreground line-clamp-2 leading-snug">{p.description}</p>
                                 )}

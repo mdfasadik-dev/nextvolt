@@ -10,6 +10,10 @@ export async function getDashboardChartData(startStr: string, endStr: string) {
 
 import { createAdminClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import type { Tables, TablesInsert } from "@/lib/types/supabase";
+
+type DeliveryOptionInsert = TablesInsert<"delivery">;
+type DeliveryWeightRuleInsert = TablesInsert<"delivery_weight_rules">;
 
 export async function getDeliveryOptions() {
     const supabase = await createAdminClient();
@@ -18,18 +22,32 @@ export async function getDeliveryOptions() {
     return data;
 }
 
-export async function createDeliveryOption(payload: any) {
+export async function getDeliveryOptionsWithRules() {
     const supabase = await createAdminClient();
-    const { error } = await supabase.from("delivery").insert([payload]);
+    const { data, error } = await supabase
+        .from("delivery")
+        .select("*, delivery_weight_rules(*)")
+        .order("sort_order", { ascending: true })
+        .order("sort_order", { foreignTable: "delivery_weight_rules", ascending: true })
+        .order("created_at", { foreignTable: "delivery_weight_rules", ascending: true });
     if (error) throw error;
-    revalidatePath("/admin/settings/delivery");
+    return data;
 }
 
-export async function updateDeliveryOption(id: string, payload: any) {
+export async function createDeliveryOption(payload: DeliveryOptionInsert) {
     const supabase = await createAdminClient();
-    const { error } = await supabase.from("delivery").update(payload).eq("id", id);
+    const { data, error } = await supabase.from("delivery").insert([payload]).select("*").single();
     if (error) throw error;
     revalidatePath("/admin/settings/delivery");
+    return data;
+}
+
+export async function updateDeliveryOption(id: string, payload: DeliveryOptionInsert) {
+    const supabase = await createAdminClient();
+    const { data, error } = await supabase.from("delivery").update(payload).eq("id", id).select("*").single();
+    if (error) throw error;
+    revalidatePath("/admin/settings/delivery");
+    return data;
 }
 
 export async function deleteDeliveryOption(id: string) {
@@ -83,6 +101,29 @@ export async function updateDeliveryOrder(items: { id: string; sort_order: numbe
     revalidatePath("/admin/settings/delivery");
 }
 
+export async function replaceDeliveryWeightRules(deliveryId: string, rules: DeliveryWeightRuleInsert[]) {
+    const supabase = await createAdminClient();
+    const { error: deleteError } = await supabase
+        .from("delivery_weight_rules")
+        .delete()
+        .eq("delivery_id", deliveryId);
+    if (deleteError) throw deleteError;
+
+    if (rules.length > 0) {
+        const normalized = rules.map((rule, index) => ({
+            ...rule,
+            delivery_id: deliveryId,
+            sort_order: typeof rule.sort_order === "number" ? rule.sort_order : index,
+        }));
+        const { error: insertError } = await supabase
+            .from("delivery_weight_rules")
+            .insert(normalized);
+        if (insertError) throw insertError;
+    }
+
+    revalidatePath("/admin/settings/delivery");
+}
+
 export async function getCoupons() {
     const supabase = await createAdminClient();
     const { data, error } = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
@@ -110,5 +151,4 @@ export async function deleteCoupon(id: string) {
     if (error) throw error;
     revalidatePath("/admin/coupons");
 }
-
 

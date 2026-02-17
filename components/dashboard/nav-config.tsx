@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Layers3, ShoppingCart, Users2, Settings, Tags, BarChart3, Boxes, FileText, Database, CircleDot, Store } from "lucide-react";
+import { LayoutDashboard, Package, Layers3, ShoppingCart, Users2, Settings, Tags, Boxes, FileText, CircleDot, Store, Megaphone, Database } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type NavItem = {
@@ -23,15 +23,20 @@ export const mainNav: NavItem[] = [
             { title: "Attributes", href: "/admin/attributes", icon: CircleDot },
         ],
     },
-    {
-        title: "Commerce",
-        href: "/admin/orders",
-        icon: ShoppingCart,
-        items: [
-            { title: "Orders", href: "/admin/orders", icon: ShoppingCart },
-            { title: "Customers", href: "/admin/customers", icon: Users2 },
-        ],
-    }
+    { title: "Orders", href: "/admin/orders", icon: ShoppingCart },
+    { title: "Customers", href: "/admin/customers", icon: Users2 },
+    // {
+    //     title: "Commerce",
+    //     href: "/admin/orders",
+    //     icon: ShoppingCart,
+    //     items: [
+    //         { title: "Orders", href: "/admin/orders", icon: ShoppingCart },
+    //         // { title: "Promotions", href: "/admin/promotions", icon: Megaphone },
+    //         { title: "Customers", href: "/admin/customers", icon: Users2 },
+    //     ],
+    // },
+    { title: "Promotions", href: "/admin/promotions", icon: Megaphone },
+    { title: "Pages", href: "/admin/pages", icon: FileText },
 ];
 
 export const secondaryNav: NavItem[] = [
@@ -43,6 +48,7 @@ export const secondaryNav: NavItem[] = [
             { title: "Store", href: "/admin/settings", icon: Store },
             { title: "Delivery", href: "/admin/settings/delivery", icon: Package },
             { title: "Charges", href: "/admin/settings/charges", icon: FileText },
+            { title: "Data Backup", href: "/admin/settings/backup", icon: Database },
             { title: "Coupons", href: "/admin/coupons", icon: Tags },
         ]
     },
