@@ -101,13 +101,14 @@ async function fetchData(slugOrId: string) {
             minFinal: number | null;
             maxFinal: number | null;
             maxDiscountPercent: number;
+            totalQty: number | null;
         }
     > = {};
 
     if (productList.length) {
         const { data: inventory } = await supabase
             .from("inventory")
-            .select("product_id,sale_price,discount_type,discount_value")
+            .select("product_id,sale_price,discount_type,discount_value,quantity")
             .in("product_id", productList.map((p) => p.id));
 
         if (inventory) {
@@ -119,6 +120,7 @@ async function fetchData(slugOrId: string) {
                         minFinal: null,
                         maxFinal: null,
                         maxDiscountPercent: 0,
+                        totalQty: null,
                     };
 
                 const original = row.sale_price;
@@ -133,6 +135,7 @@ async function fetchData(slugOrId: string) {
                 current.maxOriginal = current.maxOriginal == null ? original : Math.max(current.maxOriginal, original);
                 current.minFinal = current.minFinal == null ? final : Math.min(current.minFinal, final);
                 current.maxFinal = current.maxFinal == null ? final : Math.max(current.maxFinal, final);
+                current.totalQty = (current.totalQty ?? 0) + (row.quantity ?? 0);
 
                 let pct = 0;
                 if (row.discount_type === "percent" && row.discount_value) {

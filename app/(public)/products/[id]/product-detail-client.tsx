@@ -144,11 +144,20 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
     const displayImage = activeImageUrl || galleryImages[0] || null;
     const hasVariants = variants.length > 0;
     const cartVariant = hasVariants ? activeVariant : null;
+    const hasAnyVariantInStock = useMemo(
+        () => variants.some((variant) => (variant.totalQty ?? 0) > 0),
+        [variants]
+    );
+    const isOutOfStock = hasVariants
+        ? activeVariant
+            ? (activeVariant.totalQty ?? 0) <= 0
+            : !hasAnyVariantInStock
+        : (baseQty ?? 0) <= 0;
     const cartPrice = cartVariant
         ? cartVariant.minPrice ?? cartVariant.maxPrice ?? null
         : basePriceValue ?? null;
     const cartVariantName = cartVariant ? (cartVariant.title || cartVariant.sku || cartVariant.id) : null;
-    const canAddToCart = cartPrice != null && (!hasVariants || cartVariant != null);
+    const canAddToCart = !isOutOfStock && cartPrice != null && (!hasVariants || cartVariant != null);
 
     const activeMarkdown = activeVariant?.details_md || productDetailsMd || null;
 
@@ -201,6 +210,13 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                             </div>
                         )}
                         {badge?.label ? <ProductBadgePill className='absolute top-4 left-4 z-10' label={badge.label} color={badge.color} /> : null}
+                        {isOutOfStock && (
+                            <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/65">
+                                <span className="rounded-md bg-background/90 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-foreground">
+                                    Out of Stock
+                                </span>
+                            </div>
+                        )}
                     </div>
                     {galleryImages.length > 1 && (
                         <div className="grid grid-cols-5 gap-2">
@@ -238,14 +254,14 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                     </div>
                     <div className="flex flex-col gap-4">
                         <div className="flex flex-col gap-1">
-                            {(!selected && basePriceOriginal && basePriceOriginal !== priceLabel) && (
+                            {!isOutOfStock && (!selected && basePriceOriginal && basePriceOriginal !== priceLabel) && (
                                 <div className="text-sm text-muted-foreground line-through">{basePriceOriginal}</div>
                             )}
-                            {(selected && showOriginal && originalLabel) && (
+                            {!isOutOfStock && (selected && showOriginal && originalLabel) && (
                                 <div className="text-sm text-muted-foreground line-through">{originalLabel}</div>
                             )}
-                            <div className="text-xl font-semibold">{priceLabel}</div>
-                            {!variants.length && baseQty != null && (
+                            {!isOutOfStock && <div className="text-xl font-semibold">{priceLabel}</div>}
+                            {!variants.length && baseQty != null && baseQty > 0 && (
                                 <div className="text-xs text-muted-foreground">In stock: {baseQty}{baseUnit ? ` ${baseUnit}` : ''}</div>
                             )}
                             <div className="flex flex-wrap gap-2 pt-2">

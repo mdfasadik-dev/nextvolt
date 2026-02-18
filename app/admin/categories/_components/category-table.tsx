@@ -22,41 +22,58 @@ interface DetailData { category: Category; attributes: Attribute[] }
 
 function DetailModal({ open, onClose, detail }: { open: boolean; onClose: () => void; detail: DetailData | null }) {
     if (!detail) return null;
+    const isActive = detail.category.is_active;
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-            <DialogContent>
-                <DialogHeader>
+            <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col overflow-hidden">
+                <DialogHeader className="border-b pb-3">
                     <DialogTitle>Category Details</DialogTitle>
-                    <button onClick={onClose} aria-label="Close" className="p-1 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground">
-                        <X className="w-4 h-4" />
-                    </button>
                 </DialogHeader>
-                <div className="py-4 space-y-4">
-                    {(detail.category as any).image_url && (
-                        <div className="flex justify-center mb-2">
-                            <div className="relative max-h-40 w-full flex items-center justify-center">
-                                <Image
-                                    src={(detail.category as any).image_url as string}
-                                    alt={detail.category.name}
-                                    width={320}
-                                    height={320}
-                                    className="max-h-40 w-auto rounded-md border object-contain bg-muted"
-                                />
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-1">
+                    <div className="rounded-lg border bg-muted/20 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground">Category</p>
+                                <p className="text-base font-semibold">{detail.category.name}</p>
+                                <p className="text-xs text-muted-foreground">Slug: {detail.category.slug || "—"}</p>
                             </div>
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${isActive ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground border-border"}`}>
+                                {isActive ? "Active" : "Inactive"}
+                            </span>
                         </div>
-                    )}
-                    <div>
-                        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground mb-1">BASIC</h3>
-                        <dl className="grid grid-cols-3 gap-y-1 text-xs">
-                            <dt className="font-medium">Name</dt><dd className="col-span-2 break-words">{detail.category.name}</dd>
-                            <dt className="font-medium">Slug</dt><dd className="col-span-2 break-words">{detail.category.slug || '—'}</dd>
-                            {/* <dt className="font-medium">Order</dt><dd className="col-span-2">{detail.category.sort_order ?? 0}</dd> */}
-                            <dt className="font-medium">Active</dt><dd className="col-span-2">{detail.category.is_active ? 'Yes' : 'No'}</dd>
-                            <dt className="font-medium">Parent</dt><dd className="col-span-2">{detail.category.parent_id ? 'Linked' : '—'}</dd>
-                        </dl>
                     </div>
-                    <div>
-                        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground mb-1">ATTRIBUTES</h3>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {detail.category.image_url ? (
+                            <div className="rounded-lg border p-4">
+                                <h3 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground">IMAGE</h3>
+                                <div className="relative h-44 w-full overflow-hidden rounded-md border bg-muted">
+                                    <Image
+                                        src={detail.category.image_url}
+                                        alt={detail.category.name}
+                                        fill
+                                        sizes="(max-width: 768px) 100vw, 400px"
+                                        className="object-contain"
+                                    />
+                                </div>
+                            </div>
+                        ) : null}
+
+                        <div className="rounded-lg border p-4">
+                            <h3 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground">DETAILS</h3>
+                            <dl className="grid grid-cols-2 gap-y-2 text-xs">
+                                <dt className="font-medium text-muted-foreground">Status</dt>
+                                <dd className="text-right">{isActive ? "Active" : "Inactive"}</dd>
+                                <dt className="font-medium text-muted-foreground">Parent</dt>
+                                <dd className="text-right">{detail.category.parent_id ? "Linked" : "—"}</dd>
+                                <dt className="font-medium text-muted-foreground">Slug</dt>
+                                <dd className="truncate text-right">{detail.category.slug || "—"}</dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <div className="rounded-lg border p-4">
+                        <h3 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground">ATTRIBUTES</h3>
                         {detail.attributes.length ? (
                             <ul className="flex flex-wrap gap-2">
                                 {detail.attributes.map(a => <li key={a.id} className="text-[10px] rounded bg-muted px-2 py-1">{a.name}<span className="ml-1 text-[9px] text-muted-foreground">({a.data_type})</span></li>)}
@@ -64,7 +81,7 @@ function DetailModal({ open, onClose, detail }: { open: boolean; onClose: () => 
                         ) : <p className="text-xs text-muted-foreground">No attributes linked.</p>}
                     </div>
                 </div>
-                <DialogFooter>
+                <DialogFooter className="border-t pt-3">
                     <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
                 </DialogFooter>
             </DialogContent>
@@ -82,7 +99,7 @@ export function CategoryTable({ data, onEdit, onDelete, deletingIds, onReorder, 
     async function openDetail(cat: Category) {
         setLoadingId(cat.id);
         try {
-            const resolved: Attribute[] = await fetchCategoryAttributes(cat.id) as any;
+            const resolved = await fetchCategoryAttributes(cat.id);
             setDetail({ category: cat, attributes: resolved });
             setOpen(true);
         } catch {
@@ -141,10 +158,10 @@ export function CategoryTable({ data, onEdit, onDelete, deletingIds, onReorder, 
                                 </span>
                             </td>
                             <td className="px-3 py-2">
-                                {(row as any).image_url ? (
+                                {row.image_url ? (
                                     <div className="relative w-10 h-10 rounded border bg-muted overflow-hidden">
                                         <Image
-                                            src={(row as any).image_url as string}
+                                            src={row.image_url}
                                             alt={row.name}
                                             fill
                                             sizes="40px"

@@ -4,6 +4,7 @@ import { CheckoutService } from "@/lib/services/checkoutService";
 
 type CheckoutItemInput = {
     productId: string;
+    variantId?: string;
     quantity: number;
     price?: number;
 };
@@ -26,6 +27,7 @@ export async function calculateCheckout(items: CheckoutItemInput[], deliveryId?:
         const result = await CheckoutService.calculateOrderTotals(
             items.map((item) => ({
                 productId: item.productId,
+                variantId: item.variantId,
                 quantity: item.quantity,
                 price: item.price ?? 0,
             })),

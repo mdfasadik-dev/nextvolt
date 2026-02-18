@@ -24,6 +24,8 @@ export type CalculatedTotals = {
     total: number;
 };
 
+type ProductAvailabilityRow = Pick<Tables<"products">, "id" | "name" | "is_active" | "is_deleted" | "category_id">;
+
 function roundMoney(value: number) {
     return Math.round(value * 100) / 100;
 }
@@ -61,9 +63,13 @@ function computeRuleCharge(totalWeight: number, rule: DeliveryWeightRuleRow) {
 }
 
 export class CheckoutService {
+    private static buildItemKey(productId: string, variantId?: string | null) {
+        return `${productId}::${variantId || "base"}`;
+    }
+
     private static async assertProductsAreCheckoutAvailable(items: Array<{ productId: string }>) {
         const productIds = Array.from(new Set(items.map((item) => item.productId).filter(Boolean)));
-        if (productIds.length === 0) return;
+        if (productIds.length === 0) return new Map<string, ProductAvailabilityRow>();
 
         const supabase = await createAdminClient();
         const { data: products, error: productsError } = await supabase
@@ -73,7 +79,7 @@ export class CheckoutService {
 
         if (productsError) throw productsError;
 
-        const productMap = new Map((products || []).map((product) => [product.id, product]));
+        const productMap = new Map<string, ProductAvailabilityRow>((products || []).map((product) => [product.id, product]));
 
         const unavailableNames = new Set<string>();
         for (const id of productIds) {
@@ -115,6 +121,68 @@ export class CheckoutService {
             throw new Error(
                 `Some items in your cart are unavailable (inactive/deleted product or category): ${head}${suffix}. Please remove them and try again.`
             );
+        }
+
+        return productMap;
+    }
+
+    private static async assertItemsInStock(
+        items: Array<{ productId: string; variantId?: string; quantity: number }>,
+        productMap: Map<string, ProductAvailabilityRow>
+    ) {
+        const normalizedItems = items.filter((item) => item.productId && item.quantity > 0);
+        if (normalizedItems.length === 0) return;
+
+        const productIds = Array.from(new Set(normalizedItems.map((item) => item.productId)));
+        const supabase = await createAdminClient();
+
+        const { data: inventoryRows, error: inventoryError } = await supabase
+            .from("inventory")
+            .select("product_id,variant_id,quantity")
+            .in("product_id", productIds);
+        if (inventoryError) throw inventoryError;
+
+        const hasInventoryRecordByKey = new Set<string>();
+        const stockQtyByKey = new Map<string, number>();
+        for (const row of inventoryRows || []) {
+            const key = this.buildItemKey(row.product_id, row.variant_id);
+            hasInventoryRecordByKey.add(key);
+            stockQtyByKey.set(key, (stockQtyByKey.get(key) ?? 0) + (row.quantity ?? 0));
+        }
+
+        const variantIds = Array.from(
+            new Set(normalizedItems.map((item) => item.variantId).filter((variantId): variantId is string => Boolean(variantId)))
+        );
+        const variantLabelById = new Map<string, string>();
+        if (variantIds.length > 0) {
+            const { data: variants, error: variantsError } = await supabase
+                .from("product_variants")
+                .select("id,title,sku")
+                .in("id", variantIds);
+            if (variantsError) throw variantsError;
+            for (const variant of variants || []) {
+                variantLabelById.set(variant.id, variant.title || variant.sku || variant.id);
+            }
+        }
+
+        const outOfStockItems = new Set<string>();
+        for (const item of normalizedItems) {
+            const key = this.buildItemKey(item.productId, item.variantId);
+            const hasInventoryRecord = hasInventoryRecordByKey.has(key);
+            const availableQty = stockQtyByKey.get(key) ?? 0;
+
+            if (!hasInventoryRecord || availableQty <= 0) {
+                const productName = productMap.get(item.productId)?.name || item.productId;
+                const variantLabel = item.variantId ? (variantLabelById.get(item.variantId) || item.variantId) : null;
+                outOfStockItems.add(variantLabel ? `${productName} (${variantLabel})` : productName);
+            }
+        }
+
+        if (outOfStockItems.size > 0) {
+            const list = Array.from(outOfStockItems);
+            const head = list.slice(0, 3).join(", ");
+            const suffix = list.length > 3 ? ` and ${list.length - 3} more` : "";
+            throw new Error(`Some items in your cart are out of stock: ${head}${suffix}. Please remove them and try again.`);
         }
     }
 
@@ -252,11 +320,12 @@ export class CheckoutService {
     }
 
     static async calculateOrderTotals(
-        items: { productId: string; price: number; quantity: number }[],
+        items: { productId: string; variantId?: string; price: number; quantity: number }[],
         deliveryId?: string,
         couponCode?: string
     ): Promise<CalculatedTotals> {
-        await this.assertProductsAreCheckoutAvailable(items);
+        const productMap = await this.assertProductsAreCheckoutAvailable(items);
+        await this.assertItemsInStock(items, productMap);
         const supabase = await createAdminClient();
 
         // 1. Calculate Subtotal

@@ -97,7 +97,7 @@ export function CheckoutForm() {
         const timer = setTimeout(() => {
             startProcesing(async () => {
                 const res = await calculateCheckout(
-                    cart.items.map(i => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+                    cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
                     selectedDelivery,
                     appliedCoupon || undefined
                 );
@@ -113,7 +113,7 @@ export function CheckoutForm() {
                         setAppliedCoupon(null);
 
                         const fallback = await calculateCheckout(
-                            cart.items.map(i => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+                            cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
                             selectedDelivery,
                             undefined
                         );
@@ -143,7 +143,7 @@ export function CheckoutForm() {
 
         startProcesing(async () => {
             const res = await calculateCheckout(
-                cart.items.map(i => ({ productId: i.productId, price: i.price, quantity: i.quantity })),
+                cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
                 selectedDelivery,
                 normalizedCode
             );
@@ -161,7 +161,7 @@ export function CheckoutForm() {
             }
 
             setAppliedCoupon(null);
-            if (res.error && res.error.toLowerCase().includes("unavailable")) {
+            if (res.error && (res.error.toLowerCase().includes("unavailable") || res.error.toLowerCase().includes("out of stock"))) {
                 setPricingError(res.error);
             }
             setCouponState({

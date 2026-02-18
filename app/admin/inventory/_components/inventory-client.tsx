@@ -3,16 +3,164 @@ import { InventoryJoined } from "@/lib/services/inventoryService";
 import { listInventoryPaged, createInventory, updateInventory, deleteInventory } from "../actions";
 import { listProducts } from "@/app/admin/products/actions";
 import { listVariantsByProduct } from "@/app/admin/variants/actions";
+import { listCategoriesPaged } from "@/app/admin/categories/actions";
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast-provider";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Loader2, Eye } from "lucide-react";
+import { Pencil, Trash2, Loader2, Eye, Search, ChevronsUpDown, Check } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import type { Product } from "@/lib/services/productService";
 import { ProductCombobox, type ProductOption } from "@/components/ui/product-combobox";
+
+const LOW_STOCK_THRESHOLD = 5;
+
+function getStockStatus(quantity: number) {
+    if (quantity <= 0) {
+        return { label: "Out of Stock", className: "bg-red-100 text-red-700 border-red-200" };
+    }
+    if (quantity <= LOW_STOCK_THRESHOLD) {
+        return { label: "Low Stock", className: "bg-amber-100 text-amber-800 border-amber-200" };
+    }
+    return { label: "In Stock", className: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+}
+
+function formatMoney(value: number | null | undefined) {
+    const symbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
+    return `${symbol}${Number(value ?? 0).toFixed(2)}`;
+}
+
+function getInventoryType(variantId: string | null | undefined) {
+    if (variantId) {
+        return { label: "Variant", className: "bg-sky-100 text-sky-700 border-sky-200" };
+    }
+    return { label: "Base", className: "bg-slate-100 text-slate-700 border-slate-200" };
+}
+
+function getDiscountDisplay(discountType: string | null | undefined, discountValue: number | null | undefined) {
+    const type = (discountType || "none").toLowerCase();
+    const value = Number(discountValue ?? 0);
+
+    if (type === "none" || value <= 0) {
+        return { label: "No Discount", className: "bg-muted text-muted-foreground border-border" };
+    }
+    if (type === "percent") {
+        return { label: `${value}% Off`, className: "bg-blue-100 text-blue-700 border-blue-200" };
+    }
+    if (type === "amount") {
+        return { label: `${formatMoney(value)} Off`, className: "bg-violet-100 text-violet-700 border-violet-200" };
+    }
+    return { label: `${type} (${value})`, className: "bg-muted text-muted-foreground border-border" };
+}
+
+type CategoryFilterOption = { id: string; name: string };
+
+interface CategoryFilterSelectProps {
+    valueId: string;
+    valueLabel: string;
+    onChange: (option: CategoryFilterOption | null) => void;
+    disabled?: boolean;
+}
+
+function CategoryFilterSelect({ valueId, valueLabel, onChange, disabled = false }: CategoryFilterSelectProps) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState("");
+    const [options, setOptions] = useState<CategoryFilterOption[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!open) return;
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            setLoading(true);
+            listCategoriesPaged({ page: 1, pageSize: 12, search: query.trim() || undefined })
+                .then((res) => {
+                    if (cancelled) return;
+                    setOptions((res.rows || []).map((row) => ({ id: row.id, name: row.name })));
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    setOptions([]);
+                })
+                .finally(() => {
+                    if (!cancelled) setLoading(false);
+                });
+        }, 250);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [open, query]);
+
+    useEffect(() => {
+        if (!open) setQuery("");
+    }, [open]);
+
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                disabled={disabled}
+                onClick={() => setOpen((prev) => !prev)}
+                className={`flex h-8 min-w-52 items-center justify-between rounded-md border bg-background px-2 text-left text-xs ${disabled ? "opacity-60" : "hover:bg-accent/50"}`}
+            >
+                <span className="truncate">{valueId ? valueLabel : "All categories"}</span>
+                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+            {open ? (
+                <div className="absolute z-50 mt-1 w-64 rounded-md border bg-popover shadow-lg">
+                    <div className="flex items-center gap-2 border-b px-2 py-2">
+                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search categories..."
+                            className="h-7 w-full border-none bg-transparent text-xs outline-none"
+                        />
+                    </div>
+                    <div className="max-h-56 overflow-y-auto py-1 text-xs">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onChange(null);
+                                setOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent ${!valueId ? "bg-accent/80" : ""}`}
+                        >
+                            <span>All</span>
+                            {!valueId ? <Check className="h-3.5 w-3.5" /> : null}
+                        </button>
+                        {loading ? (
+                            <div className="px-3 py-2 text-muted-foreground">Loading...</div>
+                        ) : options.length === 0 ? (
+                            <div className="px-3 py-2 text-muted-foreground">No categories found.</div>
+                        ) : (
+                            options.map((option) => {
+                                const active = valueId === option.id;
+                                return (
+                                    <button
+                                        key={option.id}
+                                        type="button"
+                                        onClick={() => {
+                                            onChange(option);
+                                            setOpen(false);
+                                        }}
+                                        className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent ${active ? "bg-accent/80" : ""}`}
+                                    >
+                                        <span className="truncate">{option.name}</span>
+                                        {active ? <Check className="h-3.5 w-3.5" /> : null}
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            ) : null}
+        </div>
+    );
+}
 
 export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
     const toast = useToast();
@@ -21,20 +169,22 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
     const [pageSize, setPageSize] = useState(20);
     const [total, setTotal] = useState(initial.length);
     const [search, setSearch] = useState("");
+    const [selectedCategoryId, setSelectedCategoryId] = useState("");
+    const [selectedCategoryName, setSelectedCategoryName] = useState("");
     const [loadingList, setLoadingList] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [formPending, setFormPending] = useState(false);
-    async function load(p = page, s = search) {
+    async function load(p = page, s = search, categoryId = selectedCategoryId) {
         setLoadingList(true); setError(null);
-        try { const res = await listInventoryPaged({ page: p, pageSize, search: s }); setRecords(res.rows); setTotal(res.total); setPage(res.page); }
+        try { const res = await listInventoryPaged({ page: p, pageSize, search: s, categoryId: categoryId || undefined }); setRecords(res.rows); setTotal(res.total); setPage(res.page); }
         catch (e: any) { setError(e?.message || 'Failed to load inventory'); }
         finally { setLoadingList(false); }
     }
-    useEffect(() => { load(1, search); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pageSize]);
-    useEffect(() => { const t = setTimeout(() => { load(1, search); }, 350); return () => clearTimeout(t); }, [search]);
-    async function create(payload: any) { setFormPending(true); try { await createInventory(payload); toast.push({ variant: 'success', title: 'Inventory added' }); await load(1, search); } catch (e: any) { toast.push({ variant: 'error', title: 'Create failed', description: e?.message }); } finally { setFormPending(false); } }
-    async function update(payload: any) { setFormPending(true); try { await updateInventory(payload); toast.push({ variant: 'success', title: 'Inventory updated' }); await load(page, search); } catch (e: any) { toast.push({ variant: 'error', title: 'Update failed', description: e?.message }); } finally { setFormPending(false); } }
-    async function remove(id: string) { try { await deleteInventory({ id }); toast.push({ variant: 'success', title: 'Inventory deleted' }); await load(page, search); } catch (e: any) { toast.push({ variant: 'error', title: 'Delete failed', description: e?.message }); } }
+    useEffect(() => { load(1, search, selectedCategoryId); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pageSize]);
+    useEffect(() => { const t = setTimeout(() => { load(1, search, selectedCategoryId); }, 350); return () => clearTimeout(t); }, [search, selectedCategoryId]);
+    async function create(payload: any) { setFormPending(true); try { await createInventory(payload); toast.push({ variant: 'success', title: 'Inventory added' }); await load(1, search, selectedCategoryId); } catch (e: any) { toast.push({ variant: 'error', title: 'Create failed', description: e?.message }); } finally { setFormPending(false); } }
+    async function update(payload: any) { setFormPending(true); try { await updateInventory(payload); toast.push({ variant: 'success', title: 'Inventory updated' }); await load(page, search, selectedCategoryId); } catch (e: any) { toast.push({ variant: 'error', title: 'Update failed', description: e?.message }); } finally { setFormPending(false); } }
+    async function remove(id: string) { try { await deleteInventory({ id }); toast.push({ variant: 'success', title: 'Inventory deleted' }); await load(page, search, selectedCategoryId); } catch (e: any) { toast.push({ variant: 'error', title: 'Delete failed', description: e?.message }); } }
     const isPending = loadingList || formPending;
     const [editing, setEditing] = useState<InventoryJoined | null>(null);
     const [products, setProducts] = useState<Product[]>([]);
@@ -170,9 +320,16 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
     const [viewing, setViewing] = useState<InventoryJoined | null>(null);
     function openView(r: InventoryJoined) { setViewing(r); }
     function closeView() { setViewing(null); }
+    const viewingStatus = viewing ? getStockStatus(viewing.quantity ?? 0) : null;
 
-    return <div className="grid gap-6 md:grid-cols-3">
-        <Card className="md:col-span-1 self-start"><CardHeader><CardTitle>{editing ? "Edit Inventory" : "Add Inventory"}</CardTitle></CardHeader><CardContent>{error && <div className="mb-4 text-xs text-red-500">{error}</div>}<form onSubmit={handleSubmit} className="space-y-3">
+    function handleCategoryFilterChange(option: CategoryFilterOption | null) {
+        setSelectedCategoryId(option?.id || "");
+        setSelectedCategoryName(option?.name || "");
+        setPage(1);
+    }
+
+    return <div className="space-y-6">
+        <Card><CardHeader><CardTitle>{editing ? "Edit Inventory" : "Add Inventory"}</CardTitle></CardHeader><CardContent>{error && <div className="mb-4 text-xs text-red-500">{error}</div>}<form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-1">
                 <label className="text-xs">Product</label>
                 <ProductCombobox
@@ -198,7 +355,7 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
             <Button type="submit" disabled={isPending} className="w-full">{isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? (isPending ? "Updating" : "Update") : (isPending ? "Creating" : "Add")}</Button>
             {editing && <button type="button" className="text-xs underline text-muted-foreground" onClick={() => setEditing(null)}>Cancel edit</button>}
         </form></CardContent></Card>
-        <Card className="md:col-span-2">
+        <Card>
             <CardHeader>
                 <div className="flex flex-wrap items-center gap-3 justify-between">
                     <CardTitle>Inventory</CardTitle>
@@ -207,6 +364,12 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
                             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product / variant / unit" className="h-8 rounded-md border bg-background px-2 text-sm w-60" />
                             {search && <button onClick={() => setSearch("")} className="absolute right-1 top-1 text-xs text-muted-foreground hover:text-foreground" type="button">×</button>}
                         </div>
+                        <CategoryFilterSelect
+                            valueId={selectedCategoryId}
+                            valueLabel={selectedCategoryName}
+                            onChange={handleCategoryFilterChange}
+                            disabled={loadingList}
+                        />
                         <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))} className="h-8 rounded-md border bg-background px-2 text-xs">
                             {[10, 20, 30, 50].map(sz => <option key={sz} value={sz}>{sz}/page</option>)}
                         </select>
@@ -219,23 +382,41 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
                     <tr className="text-left text-xs text-muted-foreground">
                         <th className="py-2">Product</th>
                         <th className="py-2">Variant</th>
+                        {/* <th className="py-2">Type</th> */}
                         <th className="py-2">Qty</th>
-                        <th className="py-2">Purchase</th>
+                        <th className="py-2">Status</th>
+                        {/* <th className="py-2">Purchase</th> */}
                         <th className="py-2">Sale</th>
                         <th className="py-2">Discount</th>
-                        <th className="py-2">Updated</th>
+                        {/* <th className="py-2">Updated</th> */}
                         <th className="py-2 w-px" /></tr>
                 </thead>
                 <tbody>{records.map(r => {
-                    const discountSuffix = r.discount_type !== 'none' && r.discount_value ? `(${r.discount_value})` : '';
+                    const inventoryType = getInventoryType(r.variant_id);
+                    const discountDisplay = getDiscountDisplay(r.discount_type, r.discount_value);
+                    const stockStatus = getStockStatus(r.quantity ?? 0);
                     return <tr key={r.id} className="border-t">
                         <td className="py-2 text-xs">{r.product?.name || products.find(p => p.id === r.product_id)?.name || '-'}</td>
                         <td className="py-2 text-xs">{r.variant?.title || r.variant?.sku || '-'}</td>
-                        <td className="py-2 text-xs">{r.quantity}</td>
-                        <td className="py-2 text-xs">{r.purchase_price}</td>
-                        <td className="py-2 text-xs">{r.sale_price}</td>
-                        <td className="py-2 text-xs">{r.discount_type}{discountSuffix}</td>
-                        <td className="py-2 text-xs">{new Date(r.updated_at).toLocaleDateString()}</td>
+                        {/* <td className="py-2 text-xs">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${inventoryType.className}`}>
+                                {inventoryType.label}
+                            </span>
+                        </td> */}
+                        <td className="py-2 text-xs">{r.quantity} {r.unit || "pcs"}</td>
+                        <td className="py-2 text-xs">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${stockStatus.className}`}>
+                                {stockStatus.label}
+                            </span>
+                        </td>
+                        {/* <td className="py-2 text-xs font-medium">{formatMoney(r.purchase_price)}</td> */}
+                        <td className="py-2 text-xs font-medium">{formatMoney(r.sale_price)}</td>
+                        <td className="py-2 text-xs">
+                            <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${discountDisplay.className}`}>
+                                {discountDisplay.label}
+                            </span>
+                        </td>
+                        {/* <td className="py-2 text-xs">{new Date(r.updated_at).toLocaleDateString()}</td> */}
                         <td className="py-2 flex gap-1 justify-end">
                             <Button type="button" variant="ghost" size="icon" aria-label="View" onClick={() => openView(r)}><Eye className="w-4 h-4" /></Button>
                             <Button type="button" variant="ghost" size="icon" aria-label="Edit" onClick={() => setEditing(r)}>
@@ -249,37 +430,68 @@ export function InventoryClient({ initial }: { initial: InventoryJoined[] }) {
                 })}
                 </tbody>
             </table>
-                <PaginationControls page={page} pageSize={pageSize} total={total} disabled={loadingList} onPageChange={(p) => { setPage(p); load(p, search); }} />
+                <PaginationControls page={page} pageSize={pageSize} total={total} disabled={loadingList} onPageChange={(p) => { setPage(p); load(p, search, selectedCategoryId); }} />
                 <Dialog open={!!viewing} onOpenChange={(o) => { if (!o) closeView(); }}>
-                    <DialogContent className="max-w-md">
-                        <DialogHeader>
-                            <DialogTitle>Inventory Detail</DialogTitle>
-                            <button onClick={closeView} className="text-xs text-muted-foreground hover:text-foreground">Close</button>
+                    <DialogContent className="flex max-h-[90vh] w-[95vw] max-w-2xl flex-col overflow-hidden">
+                        <DialogHeader className="border-b pb-3">
+                            <DialogTitle className="text-base">Inventory Detail</DialogTitle>
                         </DialogHeader>
-                        <div className="py-4 space-y-4 text-sm">
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4 pr-1 text-sm">
                             {viewing && (
                                 <>
-                                    <div>
-                                        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground mb-1">REFERENCE</h3>
-                                        <dl className="grid grid-cols-3 gap-y-1 text-xs">
-                                            <dt className="font-medium">Product</dt><dd className="col-span-2 break-words">{viewing.product?.name || '-'}</dd>
-                                            <dt className="font-medium">Variant</dt><dd className="col-span-2 break-words">{viewing.variant?.title || viewing.variant?.sku || '—'}</dd>
-                                        </dl>
+                                    <div className="rounded-lg border bg-muted/20 p-4">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div className="space-y-1">
+                                                <p className="text-xs text-muted-foreground">Product</p>
+                                                <p className="text-sm font-semibold">{viewing.product?.name || '-'}</p>
+                                                <p className="text-xs text-muted-foreground">Variant: {viewing.variant?.title || viewing.variant?.sku || '—'}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                {viewingStatus ? (
+                                                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium ${viewingStatus.className}`}>
+                                                        {viewingStatus.label}
+                                                    </span>
+                                                ) : null}
+                                                <span className="rounded-md border bg-background px-2.5 py-1 text-xs font-medium">
+                                                    Qty: {viewing.quantity ?? 0} {viewing.unit || "pcs"}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground mb-1">STOCK & PRICING</h3>
-                                        <dl className="grid grid-cols-3 gap-y-1 text-xs">
-                                            <dt className="font-medium">Quantity</dt><dd className="col-span-2">{viewing.quantity} {viewing.unit}</dd>
-                                            <dt className="font-medium">Purchase</dt><dd className="col-span-2">{viewing.purchase_price}</dd>
-                                            <dt className="font-medium">Sale</dt><dd className="col-span-2">{viewing.sale_price}</dd>
-                                            <dt className="font-medium">Discount</dt><dd className="col-span-2">{viewing.discount_type === 'none' ? '—' : `${viewing.discount_type} ${viewing.discount_value ?? ''}`}</dd>
-                                            <dt className="font-medium">Updated</dt><dd className="col-span-2">{new Date(viewing.updated_at).toLocaleString()}</dd>
-                                        </dl>
+
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <div className="rounded-lg border p-4">
+                                            <h3 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground">STOCK</h3>
+                                            <dl className="grid grid-cols-2 gap-y-2 text-xs">
+                                                <dt className="font-medium text-muted-foreground">Quantity</dt>
+                                                <dd className="text-right font-medium">{viewing.quantity ?? 0}</dd>
+                                                <dt className="font-medium text-muted-foreground">Unit</dt>
+                                                <dd className="text-right">{viewing.unit || "pcs"}</dd>
+                                                <dt className="font-medium text-muted-foreground">Updated</dt>
+                                                <dd className="text-right">{new Date(viewing.updated_at).toLocaleString()}</dd>
+                                            </dl>
+                                        </div>
+
+                                        <div className="rounded-lg border p-4">
+                                            <h3 className="mb-3 text-xs font-semibold tracking-wide text-muted-foreground">PRICING</h3>
+                                            <dl className="grid grid-cols-2 gap-y-2 text-xs">
+                                                <dt className="font-medium text-muted-foreground">Purchase</dt>
+                                                <dd className="text-right font-medium">{formatMoney(viewing.purchase_price)}</dd>
+                                                <dt className="font-medium text-muted-foreground">Sale</dt>
+                                                <dd className="text-right font-medium">{formatMoney(viewing.sale_price)}</dd>
+                                                <dt className="font-medium text-muted-foreground">Discount</dt>
+                                                <dd className="text-right">
+                                                    {viewing.discount_type === 'none'
+                                                        ? '—'
+                                                        : `${viewing.discount_type}${viewing.discount_value != null ? ` (${viewing.discount_value})` : ''}`}
+                                                </dd>
+                                            </dl>
+                                        </div>
                                     </div>
                                 </>
                             )}
                         </div>
-                        <DialogFooter>
+                        <DialogFooter className="border-t pt-3">
                             <button onClick={closeView} className="text-xs rounded-md border px-3 py-1">Close</button>
                         </DialogFooter>
                     </DialogContent>

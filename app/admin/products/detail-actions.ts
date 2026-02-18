@@ -4,11 +4,17 @@ import { ProductAttributeValueService } from "@/lib/services/productAttributeVal
 import { AttributeService, Attribute } from "@/lib/services/attributeService";
 import { ProductImageService } from "@/lib/services/productImageService";
 import { ProductBadgeService, type ProductBadgeSummary } from "@/lib/services/productBadgeService";
+import { createClient } from "@/lib/supabase/server";
+
+const LOW_STOCK_THRESHOLD = 5;
 
 export interface ProductDetail extends Product {
     attributes: { attribute: Attribute; value: string | number | boolean | null }[];
     image_urls: string[];
     badge: ProductBadgeSummary | null;
+    stock_total_qty: number;
+    stock_status: "in" | "low" | "out";
+    stock_unit_label: string;
 }
 
 export async function fetchProductDetail(id: string): Promise<ProductDetail | null> {
@@ -19,6 +25,11 @@ export async function fetchProductDetail(id: string): Promise<ProductDetail | nu
     const attrs = await AttributeService.list().catch(() => []);
     const imageRows = await ProductImageService.listByProduct(id).catch(() => []);
     const badge = await ProductBadgeService.getByProductId(id).catch(() => null);
+    const supabase = await createClient();
+    const { data: inventoryRows } = await supabase
+        .from("inventory")
+        .select("quantity, unit")
+        .eq("product_id", id);
     const attrMap = new Map(attrs.map(a => [a.id, a] as const));
     const attributes = attrValues.map((v) => {
         const attr = attrMap.get(v.attribute_id);
@@ -32,5 +43,31 @@ export async function fetchProductDetail(id: string): Promise<ProductDetail | nu
     const image_urls = imageRows.length
         ? imageRows.map((row) => row.image_url).filter((url): url is string => !!url)
         : (product.main_image_url ? [product.main_image_url] : []);
-    return { ...product, attributes, image_urls, badge };
+    const stockTotalQty = (inventoryRows || []).reduce((sum, row) => sum + (row.quantity ?? 0), 0);
+    const stockStatus: ProductDetail["stock_status"] = stockTotalQty <= 0
+        ? "out"
+        : stockTotalQty <= LOW_STOCK_THRESHOLD
+            ? "low"
+            : "in";
+    const stockUnits = Array.from(
+        new Set(
+            (inventoryRows || [])
+                .map((row) => (row.unit || "").trim())
+                .filter((unit): unit is string => unit.length > 0)
+        )
+    );
+    const stockUnitLabel = stockUnits.length === 0
+        ? "pcs"
+        : stockUnits.length === 1
+            ? stockUnits[0]
+            : "mixed units";
+    return {
+        ...product,
+        attributes,
+        image_urls,
+        badge,
+        stock_total_qty: stockTotalQty,
+        stock_status: stockStatus,
+        stock_unit_label: stockUnitLabel,
+    };
 }

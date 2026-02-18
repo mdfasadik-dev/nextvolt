@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
 export async function listInventory() { return InventoryService.list(); }
-export async function listInventoryPaged(params: { page?: number; pageSize?: number; search?: string }) {
+export async function listInventoryPaged(params: { page?: number; pageSize?: number; search?: string; categoryId?: string }) {
     const page = params.page && params.page > 0 ? params.page : 1;
     const pageSize = params.pageSize && params.pageSize > 0 ? Math.min(params.pageSize, 100) : 20;
     const search = params.search?.trim() || undefined;
-    return InventoryService.listPaged({ page, pageSize, search });
+    const categoryId = params.categoryId?.trim() || undefined;
+    return InventoryService.listPaged({ page, pageSize, search, categoryId });
 }
 export async function createInventory(payload: { product_id?: string | null; variant_id?: string | null; quantity: number; purchase_price: number; sale_price: number; unit: string; discount_type?: string; discount_value?: number | null; }) {
     const supabase = await createClient();

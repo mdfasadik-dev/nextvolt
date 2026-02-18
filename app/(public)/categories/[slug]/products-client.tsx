@@ -15,7 +15,7 @@ interface Props {
     descendantCount: number;
     products: Product[];
     badgeMap: Record<string, { label: string; color: string } | null>;
-    priceMap: Record<string, { minOriginal: number | null; maxOriginal: number | null; minFinal: number | null; maxFinal: number | null; maxDiscountPercent: number }>;
+    priceMap: Record<string, { minOriginal: number | null; maxOriginal: number | null; minFinal: number | null; maxFinal: number | null; maxDiscountPercent: number; totalQty: number | null }>;
     attributeFilters: AttributeFilter[];
     productAttributeMap: Record<string, Record<string, string>>; // productId -> { attributeId: valueKey }
 }

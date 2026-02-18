@@ -3,8 +3,7 @@ import { Button } from "@/components/ui/button";
 import Image from 'next/image';
 import { Pencil, Trash2, Loader2, Eye, GripVertical } from "lucide-react";
 import { useState } from "react";
-import type { Product } from "@/lib/services/productService";
-import type { Category } from "@/lib/services/categoryService";
+import type { Product, ProductListItem } from "@/lib/services/productService";
 import { isProductBadgeVisibleAt } from "@/lib/constants/product-badge";
 import { ProductBadgePill } from "@/components/products/product-badge-pill";
 
@@ -19,8 +18,7 @@ type BadgeSummary = {
 };
 
 interface ProductTableProps {
-    records: Product[];
-    categories: Category[];
+    records: ProductListItem[];
     badgeMap: Record<string, BadgeSummary>;
     loadingViewId: string | null;
     onEdit: (p: Product) => void;
@@ -30,7 +28,7 @@ interface ProductTableProps {
     reorderDisabled?: boolean;
 }
 
-export function ProductTable({ records, categories, badgeMap, loadingViewId, onEdit, onDeleteRequest, onView, onReorder, reorderDisabled = false }: ProductTableProps) {
+export function ProductTable({ records, badgeMap, loadingViewId, onEdit, onDeleteRequest, onView, onReorder, reorderDisabled = false }: ProductTableProps) {
     const [dragId, setDragId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ id: string; placement: "before" | "after" } | null>(null);
 
@@ -45,7 +43,7 @@ export function ProductTable({ records, categories, badgeMap, loadingViewId, onE
                     <th className="py-2">Brand</th>
                     <th className="py-2">Badge</th>
                     <th className="py-2">Weight</th>
-                    {/* <th className="py-2">Order</th> */}
+                    {/* {showSortOrder ? <th className="py-2">Order</th> : null} */}
                     <th className="py-2">Active</th>
                     <th className="py-2 w-px" />
                 </tr>
@@ -98,7 +96,7 @@ export function ProductTable({ records, categories, badgeMap, loadingViewId, onE
                                 )}
                             </td>
                             <td className="py-2 align-middle">{r.name}</td>
-                            <td className="py-2 text-xs align-middle">{categories.find(c => c.id === r.category_id)?.name || '-'}</td>
+                            <td className="py-2 text-xs align-middle">{r.category?.name || '-'}</td>
                             <td className="py-2 text-xs align-middle">{r.brand || '-'}</td>
                             <td className="py-2 text-xs align-middle">
                                 {badge ? (
@@ -117,7 +115,7 @@ export function ProductTable({ records, categories, badgeMap, loadingViewId, onE
                                 )}
                             </td>
                             <td className="py-2 text-xs align-middle">{r.weight_grams ? `${r.weight_grams} g` : '0 g'}</td>
-                            {/* <td className="py-2 text-xs align-middle">{r.sort_order ?? 0}</td> */}
+                            {/* {showSortOrder ? <td className="py-2 text-xs align-middle">{r.sort_order ?? 0}</td> : null} */}
                             <td className="py-2 text-xs align-middle">{r.is_active ? 'Yes' : 'No'}</td>
                             <td className="py-2 flex gap-1 justify-end align-middle">
                                 <Button type="button" variant="ghost" size="icon" aria-label="View" onClick={() => onView(r.id)}>

@@ -23,14 +23,15 @@ export function ProductCardsGrid({ products, priceMap, badgeMap = {}, symbol = "
         <ul className={"grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 " + className}>
             {products.map((p) => {
                 const pricing = priceMap[p.id];
+                const isOutOfStock = (pricing?.totalQty ?? 0) <= 0;
                 const effectivePrice =
-                    pricing && pricing.minFinal != null
+                    !isOutOfStock && pricing && pricing.minFinal != null
                         ? pricing.minFinal
-                        : pricing && pricing.maxFinal != null
+                        : !isOutOfStock && pricing && pricing.maxFinal != null
                             ? pricing.maxFinal
                             : null;
-                let priceNode: React.ReactNode = "—";
-                if (pricing && pricing.minFinal != null) {
+                let priceNode: React.ReactNode = null;
+                if (!isOutOfStock && pricing && pricing.minFinal != null) {
                     const hasRange = pricing.minFinal != null && pricing.maxFinal != null && pricing.minFinal !== pricing.maxFinal;
                     const origRangeDiffers = pricing.minOriginal !== pricing.minFinal || pricing.maxOriginal !== pricing.maxFinal;
                     if (hasRange) {
@@ -92,6 +93,13 @@ export function ProductCardsGrid({ products, priceMap, badgeMap = {}, symbol = "
                                             <span className="sr-only"> discount</span>
                                         </span>
                                     )}
+                                    {isOutOfStock && (
+                                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/65">
+                                            <span className="rounded-md bg-background/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-foreground">
+                                                Out of Stock
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </Link>
                             <CardContent className="flex-1 flex flex-col gap-2 p-4">
@@ -123,6 +131,7 @@ export function ProductCardsGrid({ products, priceMap, badgeMap = {}, symbol = "
                                         productSlug={p.slug}
                                         productImage={p.main_image_url}
                                         price={effectivePrice}
+                                        disabled={isOutOfStock}
                                         size="icon"
                                         variant="default"
                                         className="flex-shrink-0"

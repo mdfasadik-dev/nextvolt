@@ -195,8 +195,8 @@ export function CategoriesClient({ initial }: Props) {
     }
 
     return (
-        <div className="grid gap-6 md:grid-cols-3">
-            <Card className="md:col-span-1 self-start">
+        <div className="space-y-6">
+            <Card>
                 <CardHeader>
                     <CardTitle>{editing ? "Edit Category" : "New Category"}</CardTitle>
                 </CardHeader>
@@ -241,7 +241,7 @@ export function CategoriesClient({ initial }: Props) {
                     )}
                 </CardContent>
             </Card>
-            <Card className="md:col-span-2">
+            <Card>
                 <CardHeader>
                     <CardTitle>All Categories</CardTitle>
                 </CardHeader>

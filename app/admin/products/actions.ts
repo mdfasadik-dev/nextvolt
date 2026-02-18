@@ -17,6 +17,13 @@ export async function listProductsPaged(params: { page?: number; pageSize?: numb
     const categoryIds = Array.from(new Set((params.categoryIds || []).map((id) => id.trim()).filter(Boolean)));
     return ProductService.listPaged({ page, pageSize, search, categoryId, categoryIds });
 }
+export async function listFeaturedProducts(params: { page?: number; pageSize?: number; search?: string; categoryId?: string } = {}) {
+    const page = params.page && params.page > 0 ? params.page : 1;
+    const pageSize = params.pageSize && params.pageSize > 0 ? Math.min(params.pageSize, 100) : 20;
+    const search = params.search?.trim() || undefined;
+    const categoryId = params.categoryId?.trim() || undefined;
+    return ProductService.listFeaturedAdminPaged({ page, pageSize, search, categoryId });
+}
 export async function searchProducts(term: string) {
     noStore();
     const response = await ProductService.listPaged({
@@ -108,6 +115,21 @@ export async function reorderProducts(payload: { categoryId: string; orderedIds:
 
     await ProductService.reorderInCategory({
         categoryId: payload.categoryId,
+        orderedIds: payload.orderedIds,
+        startOrder: payload.startOrder,
+    });
+
+    revalidatePath("/admin/products");
+    revalidatePath("/");
+    return { ok: true };
+}
+
+export async function reorderFeaturedProducts(payload: { orderedIds: string[]; startOrder?: number }) {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Unauthorized");
+
+    await ProductService.reorderFeatured({
         orderedIds: payload.orderedIds,
         startOrder: payload.startOrder,
     });

@@ -252,6 +252,7 @@ export async function POST(request: NextRequest) {
             lowered.includes("coupon") ||
             lowered.includes("minimum order amount") ||
             lowered.includes("unavailable") ||
+            lowered.includes("out of stock") ||
             lowered.includes("inactive product") ||
             lowered.includes("inactive category");
         return NextResponse.json({ error: message }, { status: isValidationError ? 400 : 500 });
