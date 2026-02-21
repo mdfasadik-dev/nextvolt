@@ -10,6 +10,7 @@ import { ImagePlus, Trash2 } from 'lucide-react';
 import { StorageService } from '@/lib/services/storageService';
 import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
 import { WarningDialog } from "@/components/ui/warning-dialog";
+import { buildCategoryTreeItems, collectDescendantCategoryIds } from "@/lib/utils/categoryTree";
 
 export interface CategoryFormProps {
     initial?: Partial<Category>;
@@ -23,7 +24,7 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
     const [slug, setSlug] = useState(initial?.slug ?? "");
     const [isActive, setIsActive] = useState(initial?.is_active ?? true);
     const [parentId, setParentId] = useState(initial?.parent_id ?? "");
-    const [existingImageUrl, setExistingImageUrl] = useState<string | null>((initial as any)?.image_url || null);
+    const [existingImageUrl, setExistingImageUrl] = useState<string | null>(initial?.image_url || null);
     const [pickedFile, setPickedFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [removalRequested, setRemovalRequested] = useState(false);
@@ -35,7 +36,7 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
         setSlug(initial?.slug ?? "");
         setIsActive(initial?.is_active ?? true);
         setParentId(initial?.parent_id ?? "");
-        setExistingImageUrl((initial as any)?.image_url || null);
+        setExistingImageUrl(initial?.image_url || null);
         setPickedFile(null);
         setRemovalRequested(false);
     }, [initial]);
@@ -59,6 +60,17 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
             .replace(/\s+/g, "-")
             .replace(/-+/g, "-");
     }, [name, slug]);
+
+    const blockedParentIds = useMemo(() => {
+        if (!initial?.id) return new Set<string>();
+        const descendants = collectDescendantCategoryIds(initial.id, parents);
+        return new Set<string>([initial.id, ...descendants]);
+    }, [initial?.id, parents]);
+
+    const parentOptions = useMemo(
+        () => buildCategoryTreeItems(parents).filter((item) => !blockedParentIds.has(item.id)),
+        [parents, blockedParentIds],
+    );
 
     return (
         <form
@@ -105,8 +117,8 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
                     className="w-full h-9 rounded-md border bg-background px-2 text-sm"
                 >
                     <option value="">None</option>
-                    {parents.filter(p => p.id !== initial?.id).map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                    {parentOptions.map((item) => (
+                        <option key={item.id} value={item.id}>{item.label}</option>
                     ))}
                 </select>
             </div>

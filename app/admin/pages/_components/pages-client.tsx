@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Markdown } from "@/components/markdown";
 import { useToast } from "@/components/ui/toast-provider";
+import { PageLoadingOverlay } from "@/components/ui/page-loading-overlay";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -562,6 +563,11 @@ export function PagesClient({ initialPages }: { initialPages: ContentPage[] }) {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+            <PageLoadingOverlay
+                open={ordering}
+                title="Saving page order..."
+                description="Please wait while the custom pages order is being updated."
+            />
         </div>
     );
 }

@@ -6,6 +6,7 @@ import { CategoryMenu } from "./category-menu";
 import { CategoryTopBar } from "./category-top-bar";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { ProductSearchBar } from "@/components/search/product-search-bar";
+import { ProfileNavButton } from "./profile-nav-button";
 
 export async function PublicNav() {
     const store = await StoreService.getFirst();
@@ -29,6 +30,7 @@ export async function PublicNav() {
                         <div className="hidden w-56 md:block lg:w-72">
                             <ProductSearchBar className="w-full" />
                         </div>
+                        <ProfileNavButton />
                         <CartDrawer />
                         <ThemeSwitcher />
                     </div>

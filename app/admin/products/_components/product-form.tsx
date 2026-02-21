@@ -16,6 +16,7 @@ import { PRODUCT_BADGE_COLOR_OPTIONS, type ProductBadgeColor } from "@/lib/const
 import { ProductBadgePill } from "@/components/products/product-badge-pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { buildCategoryTreeItems } from "@/lib/utils/categoryTree";
 
 // values interface re-exported from hook
 
@@ -57,6 +58,7 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
     const isCustomBadgeColor = !badgeColorOption && !!badgeColor;
     const isHexColor = (value: string) => /^#([0-9a-fA-F]{6})$/.test(value.trim());
     const customColorValue = isHexColor(badgeColor) ? badgeColor : "#ef4444";
+    const categoryOptions = React.useMemo(() => buildCategoryTreeItems(categories), [categories]);
 
     // expose logic to parent once
     React.useEffect(() => { onLogic?.(logic); }, [logic, onLogic]);
@@ -83,7 +85,7 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                         required
                     >
                         <option value="" disabled>-- select category --</option>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {categoryOptions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                     </select>
                 </div>
                 <div className="space-y-1">

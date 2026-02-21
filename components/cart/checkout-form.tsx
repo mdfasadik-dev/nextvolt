@@ -232,7 +232,7 @@ export function CheckoutForm() {
                 state: "success",
                 message: `Order placed successfully. Reference: ${data.order.id.slice(0, 8).toUpperCase()}`,
             });
-            router.push(`/confirmation/${data.order.id}`); // Redirect to confirmation page
+            router.push(`/confirmation/${data.order.id}?mode=placed`);
         } catch (error: unknown) {
             setStatus({
                 state: "error",

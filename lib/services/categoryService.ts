@@ -8,9 +8,9 @@ export type CategoryUpdate = TablesUpdate<"categories">;
 
 export class CategoryService {
     private static wrap<T>(op: () => Promise<T>): Promise<T> {
-        return op().catch((err: any) => {
-            if (err && typeof err === "object" && err.code === "42501") {
-                err.message = "Permission denied by Row Level Security for categories. Create appropriate RLS policies or configure SUPABASE_SERVICE_ROLE_KEY (server-side only).";
+        return op().catch((err: unknown) => {
+            if (err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "42501") {
+                (err as { message?: string }).message = "Permission denied by Row Level Security for categories. Create appropriate RLS policies or configure SUPABASE_SERVICE_ROLE_KEY (server-side only).";
             }
             throw err;
         });
@@ -25,6 +25,47 @@ export class CategoryService {
             .order("created_at", { ascending: false });
         if (error) throw error;
         return data;
+    }
+
+    static async listSelfAndDescendantIds(rootId: string): Promise<string[]> {
+        return this.wrap(async () => {
+            const scopedRootId = rootId.trim();
+            if (!scopedRootId) return [];
+
+            const supabase = await createClient();
+            const { data, error } = await supabase
+                .from("categories")
+                .select("id,parent_id")
+                .eq("is_deleted", false);
+            if (error) throw error;
+
+            const rows = data || [];
+            const hasRoot = rows.some((row) => row.id === scopedRootId);
+            if (!hasRoot) return [];
+
+            const childrenByParent = new Map<string, string[]>();
+            for (const row of rows) {
+                if (!row.parent_id) continue;
+                const next = childrenByParent.get(row.parent_id) || [];
+                next.push(row.id);
+                childrenByParent.set(row.parent_id, next);
+            }
+
+            const resolved = new Set<string>([scopedRootId]);
+            const queue = [scopedRootId];
+            while (queue.length) {
+                const current = queue.shift();
+                if (!current) continue;
+                const children = childrenByParent.get(current) || [];
+                for (const childId of children) {
+                    if (resolved.has(childId)) continue;
+                    resolved.add(childId);
+                    queue.push(childId);
+                }
+            }
+
+            return Array.from(resolved);
+        });
     }
 
     static async listPaged(opts: { page: number; pageSize: number; search?: string }): Promise<{ rows: Category[]; total: number; page: number; pageSize: number; }> {
@@ -50,7 +91,6 @@ export class CategoryService {
         return this.wrap(async () => {
             const supabase = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
             if (process.env.NODE_ENV !== "production") {
-                // eslint-disable-next-line no-console
                 console.log("[CategoryService] create using admin client:", Boolean(SUPABASE_SERVICE_ROLE_KEY));
             }
             const { data, error } = await supabase.from("categories").insert(input).select().single();
@@ -63,7 +103,6 @@ export class CategoryService {
         return this.wrap(async () => {
             const supabase = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
             if (process.env.NODE_ENV !== "production") {
-                // eslint-disable-next-line no-console
                 console.log("[CategoryService] update using admin client:", Boolean(SUPABASE_SERVICE_ROLE_KEY));
             }
             const { data, error } = await supabase.from("categories").update(patch).eq("id", id).select().single();
@@ -76,7 +115,6 @@ export class CategoryService {
         return this.wrap(async () => {
             const supabase = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
             if (process.env.NODE_ENV !== "production") {
-                // eslint-disable-next-line no-console
                 console.log("[CategoryService] remove using admin client:", Boolean(SUPABASE_SERVICE_ROLE_KEY));
             }
             const { error } = await supabase

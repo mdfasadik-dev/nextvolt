@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown, Search, Star } from "lucide-react";
 import type { ProductListItem } from "@/lib/services/productService";
 import { listProductsPaged, deleteProduct, listProductBadgeMap, reorderProducts, listFeaturedProducts, reorderFeaturedProducts } from "../actions";
-import { listCategoriesPaged } from "@/app/admin/categories/actions";
+import { listCategories } from "@/app/admin/categories/actions";
 import { fetchProductDetail, ProductDetail } from "../detail-actions";
 import { useToast } from "@/components/ui/toast-provider";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -14,6 +14,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ProductDetailModal } from "./product-detail-modal";
 import { ProductTable } from "./product-table";
 import { Button } from "@/components/ui/button";
+import { buildCategoryTreeItems } from "@/lib/utils/categoryTree";
+import { PageLoadingOverlay } from "@/components/ui/page-loading-overlay";
 
 type BadgeSummary = {
     id: string;
@@ -50,7 +52,7 @@ function moveItemWithPlacement<T>(items: T[], fromIndex: number, toIndex: number
     return next;
 }
 
-type CategoryFilterOption = { id: string; name: string };
+type CategoryFilterOption = { id: string; name: string; label: string };
 
 interface CategoryFilterSelectProps {
     valueId: string;
@@ -64,34 +66,40 @@ function CategoryFilterSelect({ valueId, valueLabel, onChange, disabled = false 
     const [query, setQuery] = useState("");
     const [options, setOptions] = useState<CategoryFilterOption[]>([]);
     const [loading, setLoading] = useState(false);
+    const [loaded, setLoaded] = useState(false);
 
     useEffect(() => {
-        if (!open) return;
+        if (!open || loaded) return;
         let cancelled = false;
-        const timer = setTimeout(() => {
-            setLoading(true);
-            listCategoriesPaged({ page: 1, pageSize: 12, search: query.trim() || undefined })
-                .then((res) => {
-                    if (cancelled) return;
-                    setOptions((res.rows || []).map((row) => ({ id: row.id, name: row.name })));
-                })
-                .catch(() => {
-                    if (cancelled) return;
-                    setOptions([]);
-                })
-                .finally(() => {
-                    if (!cancelled) setLoading(false);
-                });
-        }, 250);
+        setLoading(true);
+        listCategories()
+            .then((rows) => {
+                if (cancelled) return;
+                const treeItems = buildCategoryTreeItems(rows || []);
+                setOptions(treeItems.map((item) => ({ id: item.id, name: item.name, label: item.label })));
+                setLoaded(true);
+            })
+            .catch(() => {
+                if (cancelled) return;
+                setOptions([]);
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
         return () => {
             cancelled = true;
-            clearTimeout(timer);
         };
-    }, [open, query]);
+    }, [loaded, open]);
 
     useEffect(() => {
         if (!open) setQuery("");
     }, [open]);
+
+    const filteredOptions = useMemo(() => {
+        const term = query.trim().toLowerCase();
+        if (!term) return options;
+        return options.filter((option) => option.name.toLowerCase().includes(term));
+    }, [options, query]);
 
     return (
         <div className="relative w-64">
@@ -129,10 +137,10 @@ function CategoryFilterSelect({ valueId, valueLabel, onChange, disabled = false 
                         </button>
                         {loading ? (
                             <div className="px-3 py-2 text-muted-foreground">Loading...</div>
-                        ) : options.length === 0 ? (
+                        ) : filteredOptions.length === 0 ? (
                             <div className="px-3 py-4 text-muted-foreground">No categories found.</div>
                         ) : (
-                            options.map((option) => {
+                            filteredOptions.map((option) => {
                                 const active = option.id === valueId;
                                 return (
                                     <button
@@ -144,7 +152,7 @@ function CategoryFilterSelect({ valueId, valueLabel, onChange, disabled = false 
                                         }}
                                         className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-accent ${active ? "bg-accent/80" : ""}`}
                                     >
-                                        <span className="truncate">{option.name}</span>
+                                        <span className="truncate font-mono text-[11px]">{option.label}</span>
                                         {active ? <Check className="h-3.5 w-3.5" /> : null}
                                     </button>
                                 );
@@ -173,6 +181,7 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
 
     const [selectedCategoryId, setSelectedCategoryId] = useState("");
     const [selectedCategoryName, setSelectedCategoryName] = useState("");
+    const [selectedCategoryLabel, setSelectedCategoryLabel] = useState("");
     const [viewMode, setViewMode] = useState<ViewMode>("category");
     const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -271,6 +280,7 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
     function handleCategoryChange(option: CategoryFilterOption | null) {
         setSelectedCategoryId(option?.id || "");
         setSelectedCategoryName(option?.name || "");
+        setSelectedCategoryLabel(option?.label || "");
         setPage(1);
     }
 
@@ -291,15 +301,6 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
         const dragged = records.find((item) => item.id === dragId);
         const target = records.find((item) => item.id === targetId);
         if (!dragged || !target) return;
-        if (dragged.category_id !== target.category_id) {
-            toast.push({
-                variant: "error",
-                title: "Invalid reorder",
-                description: "Drag and drop is only allowed within the same category.",
-            });
-            return;
-        }
-        const reorderCategoryId = dragged.category_id;
         setRecords((current) => {
             previous = current;
             const fromIndex = current.findIndex((item) => item.id === dragId);
@@ -309,21 +310,15 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
         });
 
         if (next.length === 0 || next === previous) return;
-
-        const previousSameCategory = previous.filter((item) => item.category_id === reorderCategoryId);
-        const nextSameCategory = next.filter((item) => item.category_id === reorderCategoryId);
-        const prevIds = previousSameCategory.map((item) => item.id).join("|");
-        const nextIds = nextSameCategory.map((item) => item.id).join("|");
-        if (!nextSameCategory.length || prevIds === nextIds) return;
-        const startOrder = previousSameCategory.length
-            ? Math.min(...previousSameCategory.map((item) => item.sort_order ?? 0))
-            : 0;
+        const prevIds = previous.map((item) => item.id).join("|");
+        const nextIds = next.map((item) => item.id).join("|");
+        if (prevIds === nextIds) return;
+        const startOrder = previous.length ? Math.min(...previous.map((item) => item.sort_order ?? 0)) : 0;
 
         setReordering(true);
         try {
             await reorderProducts({
-                categoryId: reorderCategoryId,
-                orderedIds: nextSameCategory.map((item) => item.id),
+                orderedIds: next.map((item) => item.id),
                 startOrder,
             });
         } catch (e: unknown) {
@@ -404,7 +399,7 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
                     <div className="flex flex-wrap items-center gap-3">
                         <CategoryFilterSelect
                             valueId={selectedCategoryId}
-                            valueLabel={selectedCategoryName}
+                            valueLabel={selectedCategoryLabel || selectedCategoryName}
                             onChange={handleCategoryChange}
                             disabled={loadingList}
                         />
@@ -447,9 +442,11 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
                     ) : null}
                     {!isFeaturedMode && !selectedCategoryId ? (
                         <div className="text-xs text-muted-foreground">Select a category to enable drag and reorder.</div>
+                    ) : !isFeaturedMode ? (
+                        <div className="text-xs text-muted-foreground">Parent category filters include subcategories. Drag and reorder freely to set display order.</div>
                     ) : null}
                     {isFeaturedMode ? (
-                        <div className="text-xs text-muted-foreground">Drag and drop to control the Featured Products order shown on the public homepage. Use category filter to narrow results.</div>
+                        <div className="text-xs text-muted-foreground">Drag and drop to control the Featured Products order shown on the public homepage. Parent category filters include subcategories.</div>
                     ) : null}
                 </div>
 
@@ -516,6 +513,11 @@ export function ProductsClient({ initialRows, initialTotal }: { initialRows: Pro
                 variant="danger"
                 onCancel={() => setConfirmId(null)}
                 onConfirm={() => confirmId && executeDelete(confirmId)}
+            />
+            <PageLoadingOverlay
+                open={reordering}
+                title={isFeaturedMode ? "Saving featured order..." : "Saving product order..."}
+                description="Please wait while the new order is being applied."
             />
         </div>
     );

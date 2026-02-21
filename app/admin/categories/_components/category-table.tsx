@@ -1,16 +1,18 @@
 "use client";
 import { Category } from "@/lib/services/categoryService";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Loader2, Eye, X, GripVertical } from "lucide-react";
-import { useState } from "react";
+import { Pencil, Trash2, Loader2, Eye, GripVertical } from "lucide-react";
+import { useMemo, useState } from "react";
 import Image from 'next/image';
 import { fetchCategoryAttributes } from "../detail-actions";
 import type { Attribute } from "@/lib/services/attributeService";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { buildCategoryTreeItems } from "@/lib/utils/categoryTree";
 
 
 export interface CategoryTableProps {
     data: Category[];
+    allCategories?: Category[];
     onEdit: (c: Category) => void;
     onDelete: (id: string) => void;
     deletingIds: Set<string>;
@@ -89,12 +91,27 @@ function DetailModal({ open, onClose, detail }: { open: boolean; onClose: () => 
     );
 }
 
-export function CategoryTable({ data, onEdit, onDelete, deletingIds, onReorder, reorderDisabled = false }: CategoryTableProps) {
+export function CategoryTable({ data, allCategories = [], onEdit, onDelete, deletingIds, onReorder, reorderDisabled = false }: CategoryTableProps) {
     const [open, setOpen] = useState(false);
     const [detail, setDetail] = useState<DetailData | null>(null);
     const [loadingId, setLoadingId] = useState<string | null>(null);
     const [dragId, setDragId] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ id: string; placement: "before" | "after" } | null>(null);
+    const treeItems = useMemo(
+        () => buildCategoryTreeItems(allCategories.length ? allCategories : data),
+        [allCategories, data],
+    );
+    const treeById = useMemo(() => {
+        const map = new Map<string, { prefix: string; label: string }>();
+        for (const item of treeItems) {
+            map.set(item.id, { prefix: item.prefix, label: item.label });
+        }
+        return map;
+    }, [treeItems]);
+    const categoryNameById = useMemo(() => {
+        const source = allCategories.length ? allCategories : data;
+        return new Map(source.map((category) => [category.id, category.name] as const));
+    }, [allCategories, data]);
 
     async function openDetail(cat: Category) {
         setLoadingId(cat.id);
@@ -172,9 +189,16 @@ export function CategoryTable({ data, onEdit, onDelete, deletingIds, onReorder, 
                                     <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">—</div>
                                 )}
                             </td>
-                            <td className="px-3 py-2 font-medium">{row.name}</td>
+                            <td className="px-3 py-2 font-medium">
+                                <span className="inline-flex items-center gap-1">
+                                    {treeById.get(row.id)?.prefix ? (
+                                        <span className="text-[10px] font-mono text-muted-foreground">{treeById.get(row.id)?.prefix}</span>
+                                    ) : null}
+                                    <span>{row.name}</span>
+                                </span>
+                            </td>
                             <td className="px-3 py-2 text-muted-foreground">{row.slug ?? "—"}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{data.find(p => p.id === row.parent_id)?.name ?? "—"}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{row.parent_id ? categoryNameById.get(row.parent_id) || "—" : "—"}</td>
                             {/* <td className="px-3 py-2 text-muted-foreground">{row.sort_order ?? 0}</td> */}
                             <td className="px-3 py-2">
                                 {row.is_active ? <span className="text-green-600 text-xs font-semibold">ACTIVE</span> : <span className="text-muted-foreground text-xs">INACTIVE</span>}

@@ -4,16 +4,32 @@ import type { Category } from "@/lib/services/categoryService";
 import { CategoryForm } from "./category-form";
 import { CategoryTable } from "./category-table";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { createCategory, updateCategory, deleteCategory, listCategoriesPaged, reorderCategories } from "../actions";
+import { createCategory, updateCategory, deleteCategory, listCategories, listCategoriesPaged, reorderCategories } from "../actions";
 import { listAttributes } from "@/app/admin/attributes/actions";
 import type { Attribute } from "@/lib/services/attributeService";
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCategoryAttributes } from "../detail-actions";
 import { useToast } from "@/components/ui/toast-provider";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { PageLoadingOverlay } from "@/components/ui/page-loading-overlay";
 
 interface Props { initial: Category[] }
+type CategoryFormValues = {
+    name: string;
+    slug: string | null;
+    is_active: boolean;
+    parent_id: string | null;
+    image_url?: string | null;
+    sort_order?: number;
+};
+
+type CategoryMutationValues = CategoryFormValues & { attributeIds?: string[] };
+
+function getErrorMessage(error: unknown, fallback: string) {
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
+}
 
 function moveItemWithPlacement<T>(items: T[], fromIndex: number, toIndex: number, placement: "before" | "after"): T[] {
     if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length || fromIndex === toIndex) {
@@ -37,6 +53,7 @@ export function CategoriesClient({ initial }: Props) {
     const toast = useToast();
     // Replace generic list with paged list management
     const [records, setRecords] = useState<Category[]>(initial);
+    const [allCategories, setAllCategories] = useState<Category[]>(initial);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
     const [total, setTotal] = useState<number>(initial.length); // will be updated on first paged fetch
@@ -44,34 +61,63 @@ export function CategoriesClient({ initial }: Props) {
     const [loadingPage, setLoadingPage] = useState(false);
     const [reordering, setReordering] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const searchRef = useRef(search);
+    const hasInitializedSearchEffect = useRef(false);
 
-    async function load(p = page, s = search) {
-        setLoadingPage(true); setError(null);
+    const load = useCallback(async (p: number, s: string) => {
+        setLoadingPage(true);
+        setError(null);
         try {
             const res = await listCategoriesPaged({ page: p, pageSize, search: s });
-            setRecords(res.rows); setTotal(res.total); setPage(res.page);
-        } catch (e: any) { setError(e?.message || 'Failed to load categories'); }
-        finally { setLoadingPage(false); }
+            setRecords(res.rows);
+            setTotal(res.total);
+            setPage(res.page);
+        } catch (error: unknown) {
+            setError(getErrorMessage(error, "Failed to load categories"));
+        } finally {
+            setLoadingPage(false);
+        }
+    }, [pageSize]);
+
+    async function refreshAllCategories() {
+        try {
+            const all = await listCategories();
+            setAllCategories(all);
+        } catch {
+            // ignore non-critical refresh failure
+        }
     }
 
-    useEffect(() => { load(1, search); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [pageSize]);
+    useEffect(() => {
+        searchRef.current = search;
+    }, [search]);
+
+    useEffect(() => {
+        void load(1, searchRef.current);
+    }, [load]);
 
     // Debounced search
     useEffect(() => {
-        const t = setTimeout(() => { load(1, search); }, 350);
+        if (!hasInitializedSearchEffect.current) {
+            hasInitializedSearchEffect.current = true;
+            return;
+        }
+        const t = setTimeout(() => { void load(1, search); }, 350);
         return () => clearTimeout(t);
-    }, [search]);
+    }, [load, search]);
 
-    async function create(values: any) {
-        try {
-            await createCategory(values);
-            await load(1, search);
-        } catch (e: any) { throw e; }
+    async function create(values: CategoryMutationValues) {
+        await createCategory(values);
+        await Promise.all([load(1, search), refreshAllCategories()]);
     }
-    async function update(values: any) {
-        try { await updateCategory(values); await load(page, search); } catch (e: any) { throw e; }
+    async function update(values: CategoryMutationValues & { id: string }) {
+        await updateCategory(values);
+        await Promise.all([load(page, search), refreshAllCategories()]);
     }
-    async function remove(id: string) { try { await deleteCategory({ id }); await load(page, search); } catch (e: any) { throw e; } }
+    async function remove(id: string) {
+        await deleteCategory({ id });
+        await Promise.all([load(page, search), refreshAllCategories()]);
+    }
     const isPending = loadingPage || reordering; // reuse naming
     const reorderDisabled = isPending || !!search.trim();
     const [editing, setEditing] = useState<Category | null>(null);
@@ -91,29 +137,29 @@ export function CategoriesClient({ initial }: Props) {
             setSelectedAttrIds([]);
         } else {
             fetchCategoryAttributes(editing.id).then(attrs => {
-                setSelectedAttrIds(attrs.map((a: any) => a.id));
+                setSelectedAttrIds(attrs.map((a) => a.id));
             });
         }
     }, [editing]);
 
-    async function handleCreate(values: any) {
+    async function handleCreate(values: CategoryFormValues) {
         try {
-            const payload = { ...values, attributeIds: selectedAttrIds };
+            const payload: CategoryMutationValues = { ...values, attributeIds: selectedAttrIds };
             if (editing) {
                 await update({ ...payload, id: editing.id });
                 toast.push({ variant: "success", title: "Category updated" });
                 setEditing(null);
             } else {
-                await create(payload as any);
+                await create(payload);
                 toast.push({ variant: "success", title: "Category created" });
             }
             setSelectedAttrIds([]);
-        } catch (e: any) {
-            toast.push({ variant: "error", title: "Save failed", description: e?.message });
+        } catch (error: unknown) {
+            toast.push({ variant: "error", title: "Save failed", description: getErrorMessage(error, "Unable to save category") });
         }
     }
 
-    async function confirmDelete(id: string) {
+    function confirmDelete(id: string) {
         setConfirmId(id);
     }
 
@@ -122,8 +168,8 @@ export function CategoriesClient({ initial }: Props) {
         try {
             await remove(id);
             toast.push({ variant: "success", title: "Category deleted" });
-        } catch (e: any) {
-            toast.push({ variant: "error", title: "Delete failed", description: e?.message || "Delete failed" });
+        } catch (error: unknown) {
+            toast.push({ variant: "error", title: "Delete failed", description: getErrorMessage(error, "Delete failed") });
         } finally {
             setDeleting(prev => { const n = new Set(prev); n.delete(id); return n; });
             setConfirmId(null);
@@ -151,12 +197,13 @@ export function CategoriesClient({ initial }: Props) {
                 orderedIds: next.map((item) => item.id),
                 startOrder: (page - 1) * pageSize,
             });
-        } catch (e: any) {
+            await refreshAllCategories();
+        } catch (error: unknown) {
             setRecords(previous);
             toast.push({
                 variant: "error",
                 title: "Reorder failed",
-                description: e?.message || "Unable to update category order",
+                description: getErrorMessage(error, "Unable to update category order"),
             });
         } finally {
             setReordering(false);
@@ -208,7 +255,7 @@ export function CategoriesClient({ initial }: Props) {
                     )}
                     <CategoryForm
                         initial={editing || undefined}
-                        parents={records}
+                        parents={allCategories}
                         onSubmit={handleCreate}
                         submitting={isPending}
                     />
@@ -275,6 +322,7 @@ export function CategoriesClient({ initial }: Props) {
                         </div>
                         <CategoryTable
                             data={records}
+                            allCategories={allCategories}
                             onEdit={setEditing}
                             onDelete={confirmDelete}
                             deletingIds={deleting}
@@ -301,6 +349,11 @@ export function CategoriesClient({ initial }: Props) {
                 onConfirm={() => confirmId && executeDelete(confirmId)}
             />
             <FkBlockedModal />
+            <PageLoadingOverlay
+                open={reordering}
+                title="Saving category order..."
+                description="Please wait while the new category order is being applied."
+            />
         </div>
     );
 }

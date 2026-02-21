@@ -1,5 +1,6 @@
 "use server";
 import { ProductService } from "@/lib/services/productService";
+import { CategoryService } from "@/lib/services/categoryService";
 import { ProductAttributeValueService } from "@/lib/services/productAttributeValueService";
 import { ProductImageService } from "@/lib/services/productImageService";
 import { ProductBadgeService, type ProductBadgeInput } from "@/lib/services/productBadgeService";
@@ -9,20 +10,36 @@ import { unstable_noStore as noStore } from "next/cache";
 import type { ProductUpdate } from "@/lib/services/productService";
 
 export async function listProducts() { return ProductService.list(); }
+
+async function resolveCategoryScopeIds(categoryId?: string, categoryIds?: string[]) {
+    const uniqueIds = Array.from(new Set((categoryIds || []).map((id) => id.trim()).filter(Boolean)));
+    if (uniqueIds.length) return uniqueIds;
+    const scopedCategoryId = categoryId?.trim();
+    if (!scopedCategoryId) return [];
+    return CategoryService.listSelfAndDescendantIds(scopedCategoryId);
+}
+
 export async function listProductsPaged(params: { page?: number; pageSize?: number; search?: string; categoryId?: string; categoryIds?: string[] }) {
     const page = params.page && params.page > 0 ? params.page : 1;
     const pageSize = params.pageSize && params.pageSize > 0 ? Math.min(params.pageSize, 100) : 20;
     const search = params.search?.trim() || undefined;
     const categoryId = params.categoryId?.trim() || undefined;
-    const categoryIds = Array.from(new Set((params.categoryIds || []).map((id) => id.trim()).filter(Boolean)));
-    return ProductService.listPaged({ page, pageSize, search, categoryId, categoryIds });
+    const categoryIds = await resolveCategoryScopeIds(categoryId, params.categoryIds);
+    if (categoryId && !categoryIds.length) {
+        return { rows: [], total: 0, page, pageSize };
+    }
+    return ProductService.listPaged({ page, pageSize, search, categoryIds });
 }
 export async function listFeaturedProducts(params: { page?: number; pageSize?: number; search?: string; categoryId?: string } = {}) {
     const page = params.page && params.page > 0 ? params.page : 1;
     const pageSize = params.pageSize && params.pageSize > 0 ? Math.min(params.pageSize, 100) : 20;
     const search = params.search?.trim() || undefined;
     const categoryId = params.categoryId?.trim() || undefined;
-    return ProductService.listFeaturedAdminPaged({ page, pageSize, search, categoryId });
+    const categoryIds = await resolveCategoryScopeIds(categoryId);
+    if (categoryId && !categoryIds.length) {
+        return { rows: [], total: 0, page, pageSize };
+    }
+    return ProductService.listFeaturedAdminPaged({ page, pageSize, search, categoryIds });
 }
 export async function searchProducts(term: string) {
     noStore();
@@ -108,16 +125,24 @@ export async function deleteProduct(payload: { id: string }) {
     return res;
 }
 
-export async function reorderProducts(payload: { categoryId: string; orderedIds: string[]; startOrder?: number }) {
+export async function reorderProducts(payload: { categoryId?: string; orderedIds: string[]; startOrder?: number }) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
 
-    await ProductService.reorderInCategory({
-        categoryId: payload.categoryId,
-        orderedIds: payload.orderedIds,
-        startOrder: payload.startOrder,
-    });
+    const categoryId = payload.categoryId?.trim();
+    if (categoryId) {
+        await ProductService.reorderInCategory({
+            categoryId,
+            orderedIds: payload.orderedIds,
+            startOrder: payload.startOrder,
+        });
+    } else {
+        await ProductService.reorderByIds({
+            orderedIds: payload.orderedIds,
+            startOrder: payload.startOrder,
+        });
+    }
 
     revalidatePath("/admin/products");
     revalidatePath("/");

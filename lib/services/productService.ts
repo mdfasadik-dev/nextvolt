@@ -82,7 +82,7 @@ export class ProductService {
             return { rows: normalized, total: count || 0, page, pageSize };
         });
     }
-    static async listFeaturedAdmin(opts: { search?: string; categoryId?: string } = {}): Promise<ProductListItem[]> {
+    static async listFeaturedAdmin(opts: { search?: string; categoryId?: string; categoryIds?: string[] } = {}): Promise<ProductListItem[]> {
         return this.wrap(async () => {
             const c = await createClient();
             let q = c
@@ -90,9 +90,14 @@ export class ProductService {
                 .select("*, categories:category_id ( id, name )")
                 .eq("is_deleted", false)
                 .eq("is_featured", true);
-            const categoryId = opts.categoryId?.trim();
-            if (categoryId) {
-                q = q.eq("category_id", categoryId);
+            const scopedCategoryIds = Array.from(new Set((opts.categoryIds || []).filter(Boolean)));
+            if (scopedCategoryIds.length) {
+                q = q.in("category_id", scopedCategoryIds);
+            } else {
+                const categoryId = opts.categoryId?.trim();
+                if (categoryId) {
+                    q = q.eq("category_id", categoryId);
+                }
             }
             const search = opts.search?.trim();
             if (search) {
@@ -104,7 +109,7 @@ export class ProductService {
             return normalizeProductRows(rows);
         });
     }
-    static async listFeaturedAdminPaged(opts: { page: number; pageSize: number; search?: string; categoryId?: string }): Promise<{ rows: ProductListItem[]; total: number; page: number; pageSize: number; }> {
+    static async listFeaturedAdminPaged(opts: { page: number; pageSize: number; search?: string; categoryId?: string; categoryIds?: string[] }): Promise<{ rows: ProductListItem[]; total: number; page: number; pageSize: number; }> {
         return this.wrap(async () => {
             const { page, pageSize, search, categoryId } = opts;
             const from = (page - 1) * pageSize;
@@ -115,9 +120,14 @@ export class ProductService {
                 .select("*, categories:category_id ( id, name )", { count: "exact" })
                 .eq("is_deleted", false)
                 .eq("is_featured", true);
-            const scopedCategoryId = categoryId?.trim();
-            if (scopedCategoryId) {
-                q = q.eq("category_id", scopedCategoryId);
+            const scopedCategoryIds = Array.from(new Set((opts.categoryIds || []).filter(Boolean)));
+            if (scopedCategoryIds.length) {
+                q = q.in("category_id", scopedCategoryIds);
+            } else {
+                const scopedCategoryId = categoryId?.trim();
+                if (scopedCategoryId) {
+                    q = q.eq("category_id", scopedCategoryId);
+                }
             }
             const scopedSearch = search?.trim();
             if (scopedSearch) {
@@ -168,6 +178,24 @@ export class ProductService {
             if (error) throw error;
             const maxOrder = data?.sort_order ?? -1;
             return maxOrder + 1;
+        });
+    }
+
+    static async reorderByIds(params: { orderedIds: string[]; startOrder?: number }): Promise<void> {
+        return this.wrap(async () => {
+            const uniqueIds = Array.from(new Set((params.orderedIds || []).filter(Boolean)));
+            if (!uniqueIds.length) return;
+            const startOrder = Number.isFinite(params.startOrder) ? Number(params.startOrder) : 0;
+            const c = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
+            for (let i = 0; i < uniqueIds.length; i++) {
+                const sort_order = startOrder + i;
+                const { error } = await c
+                    .from("products")
+                    .update({ sort_order })
+                    .eq("id", uniqueIds[i])
+                    .eq("is_deleted", false);
+                if (error) throw error;
+            }
         });
     }
 
