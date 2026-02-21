@@ -24,7 +24,7 @@ export function ProfileNavButton({ className }: { className?: string }) {
         <Link
             href="/profile"
             className={cn(
-                "inline-flex h-9 items-center gap-2 rounded-full border border-border bg-background px-2.5 text-sm hover:bg-accent",
+                "inline-flex items-center gap-2 rounded-full border border-border bg-background p-1.5 lg:px-2.5 text-sm hover:bg-accent",
                 className,
             )}
             aria-label={hasProfile ? "Open profile" : "Create profile"}
@@ -48,7 +48,7 @@ export function ProfileNavButton({ className }: { className?: string }) {
                 ) : (
                     <>
                         <span className="text-[11px] font-medium">Profile</span>
-                        <span className="text-[10px] text-muted-foreground">Add details</span>
+                        <span className="text-[10px] text-muted-foreground">Sign In</span>
                     </>
                 )}
             </span>
