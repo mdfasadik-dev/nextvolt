@@ -264,32 +264,7 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                             {!variants.length && baseQty != null && baseQty > 0 && (
                                 <div className="text-xs text-muted-foreground">In stock: {baseQty}{baseUnit ? ` ${baseUnit}` : ''}</div>
                             )}
-                            <div className="flex flex-wrap gap-2 pt-2">
-                                <AddToCartButton
-                                    productId={productId}
-                                    productName={productName}
-                                    productSlug={productSlug || undefined}
-                                    productImage={displayImage || undefined}
-                                    variantId={cartVariant?.id}
-                                    variantName={cartVariantName || undefined}
-                                    price={cartPrice}
-                                    size={'lg'}
-                                    disabled={!canAddToCart}
-                                    variant="default"
-                                >
-                                    Add to Cart
-                                </AddToCartButton>
-                                {buildWaLink(activeVariant) && (
-                                    <a
-                                        href={buildWaLink(activeVariant) as string}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex w-fit items-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 transition-colors"
-                                    >
-                                        <span>WhatsApp Inquiry</span>
-                                    </a>
-                                )}
-                            </div>
+
                         </div>
                         {variants.length > 0 && (
                             <div className="flex flex-wrap gap-3">
@@ -327,6 +302,33 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                                         </button>
                                     );
                                 })}
+
+                                <div className="flex flex-wrap gap-2 pt-2">
+                                    <AddToCartButton
+                                        productId={productId}
+                                        productName={productName}
+                                        productSlug={productSlug || undefined}
+                                        productImage={displayImage || undefined}
+                                        variantId={cartVariant?.id}
+                                        variantName={cartVariantName || undefined}
+                                        price={cartPrice}
+                                        size={'lg'}
+                                        disabled={!canAddToCart}
+                                        variant="default"
+                                    >
+                                        Add to Cart
+                                    </AddToCartButton>
+                                    {buildWaLink(activeVariant) && (
+                                        <a
+                                            href={buildWaLink(activeVariant) as string}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex w-fit items-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 transition-colors"
+                                        >
+                                            <span>WhatsApp Inquiry</span>
+                                        </a>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
