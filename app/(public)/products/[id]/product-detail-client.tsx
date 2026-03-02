@@ -264,80 +264,72 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                             {!variants.length && baseQty != null && baseQty > 0 && (
                                 <div className="text-xs text-muted-foreground">In stock: {baseQty}{baseUnit ? ` ${baseUnit}` : ''}</div>
                             )}
-
-                        </div>
-                        {variants.length > 0 && (
-                            <div className="flex flex-wrap gap-3">
-                                {/* Default selector */}
-                                {/* <button
-                                    type="button"
-                                    onClick={() => handleSelect(null)}
-                                    className={cn(
-                                        'text-xs rounded-md border px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary/50',
-                                        selected === null ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
-                                    )}
-                                    aria-pressed={selected === null}
-                                >
-                                    <span className="block font-medium leading-none mb-1">Default</span>
-                                    <span className="block text-[10px]">{baseQty != null ? `In Stock: ${baseQty}${baseUnit ? ` ${baseUnit}` : ''}` : '—'}</span>
-                                </button> */}
-                                {variants.map(v => {
-                                    const active = selected === v.id;
-                                    const label = v.title || v.sku || 'Variant';
-                                    return (
-                                        <button
-                                            key={v.id}
-                                            type="button"
-                                            onClick={() => handleSelect(active ? null : v.id)}
-                                            className={cn(
-                                                'text-xs rounded-md border px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary/50',
-                                                active ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
-                                            )}
-                                            aria-pressed={active}
-                                        >
-                                            <span className="block font-medium leading-none mb-1">{label}</span>
-                                            {v.totalQty != null && (
-                                                <span className="block text-[10px] mt-0.5">In Stock: {v.totalQty}{v.unit ? ` ${v.unit}` : ''}</span>
-                                            )}
-                                        </button>
-                                    );
-                                })}
-
-                                <div className="flex flex-wrap gap-2 pt-2">
-                                    <AddToCartButton
-                                        productId={productId}
-                                        productName={productName}
-                                        productSlug={productSlug || undefined}
-                                        productImage={displayImage || undefined}
-                                        variantId={cartVariant?.id}
-                                        variantName={cartVariantName || undefined}
-                                        price={cartPrice}
-                                        size={'lg'}
-                                        disabled={!canAddToCart}
-                                        variant="default"
+                            {variants.length > 0 && (
+                                <div className="flex flex-wrap gap-3 pt-2">
+                                    {/* Default selector */}
+                                    {/* <button
+                                        type="button"
+                                        onClick={() => handleSelect(null)}
+                                        className={cn(
+                                            'text-xs rounded-md border px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary/50',
+                                            selected === null ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
+                                        )}
+                                        aria-pressed={selected === null}
                                     >
-                                        Add to Cart
-                                    </AddToCartButton>
-                                    {buildWaLink(activeVariant) && (
-                                        <a
-                                            href={buildWaLink(activeVariant) as string}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex w-fit items-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 transition-colors"
-                                        >
-                                            <span>WhatsApp Inquiry</span>
-                                        </a>
-                                    )}
+                                        <span className="block font-medium leading-none mb-1">Default</span>
+                                        <span className="block text-[10px]">{baseQty != null ? `In Stock: ${baseQty}${baseUnit ? ` ${baseUnit}` : ''}` : '—'}</span>
+                                    </button> */}
+                                    {variants.map(v => {
+                                        const active = selected === v.id;
+                                        const label = v.title || v.sku || 'Variant';
+                                        return (
+                                            <button
+                                                key={v.id}
+                                                type="button"
+                                                onClick={() => handleSelect(active ? null : v.id)}
+                                                className={cn(
+                                                    'text-xs rounded-md border px-3 py-2 transition focus:outline-none focus:ring-2 focus:ring-primary/50',
+                                                    active ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted'
+                                                )}
+                                                aria-pressed={active}
+                                            >
+                                                <span className="block font-medium leading-none mb-1">{label}</span>
+                                                {v.totalQty != null && (
+                                                    <span className="block text-[10px] mt-0.5">In Stock: {v.totalQty}{v.unit ? ` ${v.unit}` : ''}</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
+                            )}
+                            <div className="flex flex-wrap gap-2 pt-2">
+                                <AddToCartButton
+                                    productId={productId}
+                                    productName={productName}
+                                    productSlug={productSlug || undefined}
+                                    productImage={displayImage || undefined}
+                                    variantId={cartVariant?.id}
+                                    variantName={cartVariantName || undefined}
+                                    price={cartPrice}
+                                    size={'lg'}
+                                    disabled={!canAddToCart}
+                                    variant="default"
+                                >
+                                    Add to Cart
+                                </AddToCartButton>
+                                {buildWaLink(activeVariant) && (
+                                    <a
+                                        href={buildWaLink(activeVariant) as string}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex w-fit items-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 transition-colors"
+                                    >
+                                        <span>WhatsApp Inquiry</span>
+                                    </a>
+                                )}
                             </div>
-                        )}
-                    </div>
-                    {description && (
-                        <div>
-                            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground mb-2">DESCRIPTION</h2>
-                            <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{description}</p>
                         </div>
-                    )}
+                    </div>
                     {attributes.length > 0 && (
                         <div>
                             <ul className="flex flex-wrap gap-2">
@@ -345,6 +337,12 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                                     <li key={a.id} className="text-[11px] rounded bg-muted px-2 py-1">{a.name}: <span className="font-medium">{a.value}</span></li>
                                 ))}
                             </ul>
+                        </div>
+                    )}
+                    {description && (
+                        <div>
+                            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground mb-2">DESCRIPTION</h2>
+                            <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{description}</p>
                         </div>
                     )}
                 </div>
