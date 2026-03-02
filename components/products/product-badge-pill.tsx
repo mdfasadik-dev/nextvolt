@@ -42,7 +42,7 @@ export function ProductBadgePill({ label, color, centered = false, className }: 
     return (
         <span
             className={cn(
-                "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide shadow-md ring-1 backdrop-blur-sm",
+                "inline-flex items-center rounded-full px-2 py-[0.5px] text-[10px] font-semibold uppercase tracking-wide shadow-md ring-1 backdrop-blur-sm",
                 colorClassName,
                 centered && "pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2",
                 className

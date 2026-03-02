@@ -31,9 +31,10 @@ interface Props {
     baseUnit: string | null;
     productDetailsMd?: string | null;
     storePhone?: string | null;
+    maxDiscountPercent?: number;
 }
 
-export default function ProductDetailClient({ productId, productSlug, basePrice, basePriceValue, basePriceOriginal, variants, productName, brand, mainImageUrl, imageUrls = [], badge = null, description, attributes, baseQty, baseUnit, productDetailsMd, storePhone }: Props) {
+export default function ProductDetailClient({ productId, productSlug, basePrice, basePriceValue, basePriceOriginal, variants, productName, brand, mainImageUrl, imageUrls = [], badge = null, description, attributes, baseQty, baseUnit, productDetailsMd, storePhone, maxDiscountPercent = 0 }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathname = usePathname();
@@ -159,6 +160,22 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
     const cartVariantName = cartVariant ? (cartVariant.title || cartVariant.sku || cartVariant.id) : null;
     const canAddToCart = !isOutOfStock && cartPrice != null && (!hasVariants || cartVariant != null);
 
+    const discountPercent = useMemo(() => {
+        if (activeVariant) {
+            const v = activeVariant;
+            let maxPct = 0;
+            if (v.minOriginalPrice != null && v.minPrice != null && v.minOriginalPrice > v.minPrice) {
+                maxPct = ((v.minOriginalPrice - v.minPrice) / v.minOriginalPrice) * 100;
+            }
+            if (v.maxOriginalPrice != null && v.maxPrice != null && v.maxOriginalPrice > v.maxPrice) {
+                const maxPct2 = ((v.maxOriginalPrice - v.maxPrice) / v.maxOriginalPrice) * 100;
+                if (maxPct2 > maxPct) maxPct = maxPct2;
+            }
+            return maxPct > 0 ? maxPct : 0;
+        }
+        return maxDiscountPercent;
+    }, [activeVariant, maxDiscountPercent]);
+
     const activeMarkdown = activeVariant?.details_md || productDetailsMd || null;
 
     // Build WhatsApp link with prefilled message
@@ -210,6 +227,12 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                             </div>
                         )}
                         {badge?.label ? <ProductBadgePill className='absolute top-4 left-4 z-10' label={badge.label} color={badge.color} /> : null}
+                        {discountPercent > 0 && (
+                            <span className="absolute top-4 right-4 z-10 inline-flex items-center rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold leading-none text-destructive-foreground shadow-sm">
+                                -{Math.round(discountPercent)}%
+                                <span className="sr-only"> discount</span>
+                            </span>
+                        )}
                         {isOutOfStock && (
                             <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/65">
                                 <span className="rounded-md bg-background/90 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-foreground">

@@ -204,6 +204,17 @@ async function fetchProduct(idOrSlug: string) {
         .limit(1)
         .maybeSingle();
 
+    let maxDiscountPercent = 0;
+    for (const row of inventory || []) {
+        let pct = 0;
+        if (row.discount_type === "percent" && row.discount_value) {
+            pct = row.discount_value;
+        } else if (row.discount_type === "amount" && row.discount_value) {
+            pct = row.sale_price ? (row.discount_value / row.sale_price) * 100 : 0;
+        }
+        if (pct > maxDiscountPercent) maxDiscountPercent = pct;
+    }
+
     return {
         product,
         category,
@@ -217,6 +228,7 @@ async function fetchProduct(idOrSlug: string) {
         baseQty,
         baseUnit,
         storePhone: store?.contact_phone || null,
+        maxDiscountPercent,
     };
 }
 
@@ -293,7 +305,7 @@ export default async function ProductDetailPage(props: ProductPageProps) {
     const data = await fetchProduct(params.id);
     if (!data) notFound();
 
-    const { product, category, ancestors, price, attributes, variants, productImages, badge, baseQty, baseUnit, storePhone } = data;
+    const { product, category, ancestors, price, attributes, variants, productImages, badge, baseQty, baseUnit, storePhone, maxDiscountPercent } = data;
     const productPath = `/products/${product.slug || product.id}`;
 
     const symbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
@@ -421,6 +433,7 @@ export default async function ProductDetailPage(props: ProductPageProps) {
                     baseUnit={baseUnit}
                     productDetailsMd={product.details_md}
                     storePhone={storePhone}
+                    maxDiscountPercent={maxDiscountPercent}
                 />
             </div>
         </>
