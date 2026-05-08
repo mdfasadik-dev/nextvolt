@@ -345,10 +345,14 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                                 </AddToCartButton>
                                 {buildWaLink(activeVariant) && (
                                     <a
-                                        href={buildWaLink(activeVariant) as string}
-                                        target="_blank"
+                                        href={!canAddToCart ? '#' : buildWaLink(activeVariant) as string}
+                                        target={!canAddToCart ? undefined : "_blank"}
                                         rel="noopener noreferrer"
-                                        className="inline-flex w-fit items-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 transition-colors"
+                                        className={cn(
+                                            "inline-flex w-fit items-center gap-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 transition-colors",
+                                            !canAddToCart && "opacity-50 cursor-not-allowed pointer-events-none grayscale"
+                                        )}
+                                        onClick={!canAddToCart ? (e) => e.preventDefault() : undefined}
                                     >
                                         <span>WhatsApp Inquiry</span>
                                     </a>
