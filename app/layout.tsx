@@ -4,6 +4,7 @@ import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { UIProviders } from "@/components/providers/ui-providers";
 import { SEO_CONFIG, absoluteUrl } from "@/lib/seo";
+import { GoogleAnalyticsProvider } from "@/components/analytics/google-analytics-provider";
 
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
 
@@ -72,6 +73,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <UIProviders>{children}</UIProviders>
+          <GoogleAnalyticsProvider />
         </ThemeProvider>
       </body>
     </html>
