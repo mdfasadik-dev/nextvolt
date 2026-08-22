@@ -3,6 +3,8 @@ import { CategoriesSectionSkeleton } from '@/components/public/categories-sectio
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { FeaturedProducts } from '@/components/public/featured-products';
+import { FeaturedProjects } from '@/components/public/featured-projects';
+import { LoadCalculatorCta } from '@/components/public/load-calculator-cta';
 import { FeaturedProductsSkeleton } from '@/components/public/featured-products-skeleton';
 import { getActivePromotionsByType } from '@/lib/data/promotions';
 import { HeroSection } from '@/components/promotions/HeroSection';
@@ -95,6 +97,20 @@ export default async function Home() {
             <section id='featured' className="w-full max-w-6xl mx-auto flex-1 p-6 flex flex-col gap-16 scroll-mt-28">
                 <Suspense fallback={<FeaturedProductsSkeleton />}>
                     <FeaturedProducts />
+                </Suspense>
+            </section>
+
+            {/* Load Calculator */}
+            <section id='load-calculator' className="w-full max-w-6xl mx-auto flex-1 px-6 py-2 flex flex-col scroll-mt-28">
+                <Suspense fallback={null}>
+                    <LoadCalculatorCta />
+                </Suspense>
+            </section>
+
+            {/* Featured Projects */}
+            <section id='projects' className="w-full max-w-6xl mx-auto flex-1 p-6 flex flex-col gap-16 scroll-mt-28">
+                <Suspense fallback={null}>
+                    <FeaturedProjects />
                 </Suspense>
             </section>
 

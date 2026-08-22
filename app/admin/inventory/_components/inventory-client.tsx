@@ -511,7 +511,7 @@ function PaginationControls({ page, pageSize, total, disabled, onPageChange }: {
     const go = (p: number) => { if (!disabled && p >= 1 && p <= totalPages && p !== page) onPageChange(p); };
     return <div className="flex items-center gap-2 justify-end mt-4">
         <button disabled={!canPrev || disabled} onClick={() => go(page - 1)} className="h-8 px-2 text-xs rounded-md border disabled:opacity-40">Prev</button>
-        <ul className="flex items-center gap-1">{pages.map((p, i) => p === '…' ? <li key={i} className="px-1 text-xs text-muted-foreground">…</li> : <li key={p}><button disabled={disabled || p === page} onClick={() => go(p)} aria-current={p === page ? 'page' : undefined} className={`h-8 w-8 rounded-md text-xs border ${p === page ? 'bg-accent font-medium' : 'hover:bg-accent/60'}`}>{p}</button></li>)}</ul>
+        <ul className="flex items-center gap-1">{pages.map((p, i) => p === '…' ? <li key={`ellipsis-${i}`} className="px-1 text-xs text-muted-foreground">…</li> : <li key={`page-${p}`}><button disabled={disabled || p === page} onClick={() => go(p)} aria-current={p === page ? 'page' : undefined} className={`h-8 w-8 rounded-md text-xs border ${p === page ? 'bg-accent font-medium' : 'hover:bg-accent/60'}`}>{p}</button></li>)}</ul>
         <button disabled={!canNext || disabled} onClick={() => go(page + 1)} className="h-8 px-2 text-xs rounded-md border disabled:opacity-40">Next</button>
     </div>;
 }

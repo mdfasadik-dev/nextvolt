@@ -63,6 +63,514 @@ export type Database = {
         }
         Relationships: []
       }
+      calculator_meta_field_options: {
+        Row: {
+          id: string
+          field_id: string
+          label: string
+          value: string
+          number_value: number | null
+          is_default: boolean
+          sort_order: number
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          field_id: string
+          label: string
+          value: string
+          number_value?: number | null
+          is_default?: boolean
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          field_id?: string
+          label?: string
+          value?: string
+          number_value?: number | null
+          is_default?: boolean
+          sort_order?: number
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calculator_meta_field_options_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "calculator_meta_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calculator_meta_fields: {
+        Row: {
+          id: string
+          key: string
+          label: string
+          help_text: string | null
+          field_type: Database["public"]["Enums"]["calculator_field_type"]
+          unit_name: string | null
+          unit_symbol: string | null
+          min_value: number | null
+          max_value: number | null
+          step_value: number | null
+          default_number: number | null
+          default_text: string | null
+          default_json: Json | null
+          is_numeric: boolean
+          is_required: boolean
+          sort_order: number
+          is_active: boolean
+          is_deleted: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          key: string
+          label: string
+          help_text?: string | null
+          field_type?: Database["public"]["Enums"]["calculator_field_type"]
+          unit_name?: string | null
+          unit_symbol?: string | null
+          min_value?: number | null
+          max_value?: number | null
+          step_value?: number | null
+          default_number?: number | null
+          default_text?: string | null
+          default_json?: Json | null
+          is_numeric?: boolean
+          is_required?: boolean
+          sort_order?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          key?: string
+          label?: string
+          help_text?: string | null
+          field_type?: Database["public"]["Enums"]["calculator_field_type"]
+          unit_name?: string | null
+          unit_symbol?: string | null
+          min_value?: number | null
+          max_value?: number | null
+          step_value?: number | null
+          default_number?: number | null
+          default_text?: string | null
+          default_json?: Json | null
+          is_numeric?: boolean
+          is_required?: boolean
+          sort_order?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      calculator_rule_conditions: {
+        Row: {
+          id: string
+          rule_id: string
+          field_id: string
+          operator: Database["public"]["Enums"]["calculator_condition_operator"]
+          min_value: number | null
+          max_value: number | null
+          value_text: string | null
+          value_number: number | null
+          value_boolean: boolean | null
+          value_set: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          rule_id: string
+          field_id: string
+          operator?: Database["public"]["Enums"]["calculator_condition_operator"]
+          min_value?: number | null
+          max_value?: number | null
+          value_text?: string | null
+          value_number?: number | null
+          value_boolean?: boolean | null
+          value_set?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          rule_id?: string
+          field_id?: string
+          operator?: Database["public"]["Enums"]["calculator_condition_operator"]
+          min_value?: number | null
+          max_value?: number | null
+          value_text?: string | null
+          value_number?: number | null
+          value_boolean?: boolean | null
+          value_set?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calculator_rule_conditions_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "calculator_suggestion_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calculator_rule_conditions_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "calculator_meta_fields"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calculator_rule_products: {
+        Row: {
+          id: string
+          rule_id: string
+          product_id: string
+          variant_id: string | null
+          sort_order: number
+          is_primary: boolean
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          rule_id: string
+          product_id: string
+          variant_id?: string | null
+          sort_order?: number
+          is_primary?: boolean
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          rule_id?: string
+          product_id?: string
+          variant_id?: string | null
+          sort_order?: number
+          is_primary?: boolean
+          note?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calculator_rule_products_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "calculator_suggestion_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calculator_rule_products_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calculator_rule_products_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calculator_suggestion_rules: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          min_load: number
+          max_load: number | null
+          unit_name: string
+          unit_symbol: string
+          priority: number
+          headline: string | null
+          note: string | null
+          is_active: boolean
+          is_deleted: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          min_load?: number
+          max_load?: number | null
+          unit_name?: string
+          unit_symbol?: string
+          priority?: number
+          headline?: string | null
+          note?: string | null
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          min_load?: number
+          max_load?: number | null
+          unit_name?: string
+          unit_symbol?: string
+          priority?: number
+          headline?: string | null
+          note?: string | null
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      load_groups: {
+        Row: {
+          id: string
+          name: string
+          slug: string | null
+          icon: string | null
+          description: string | null
+          unit_name: string
+          unit_symbol: string
+          sort_order: number
+          is_active: boolean
+          is_deleted: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          slug?: string | null
+          icon?: string | null
+          description?: string | null
+          unit_name?: string
+          unit_symbol?: string
+          sort_order?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          slug?: string | null
+          icon?: string | null
+          description?: string | null
+          unit_name?: string
+          unit_symbol?: string
+          sort_order?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      load_items: {
+        Row: {
+          id: string
+          load_group_id: string
+          name: string
+          icon: string | null
+          unit_value: number
+          default_quantity: number
+          max_quantity: number | null
+          sort_order: number
+          is_active: boolean
+          is_deleted: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          load_group_id: string
+          name: string
+          icon?: string | null
+          unit_value?: number
+          default_quantity?: number
+          max_quantity?: number | null
+          sort_order?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          load_group_id?: string
+          name?: string
+          icon?: string | null
+          unit_value?: number
+          default_quantity?: number
+          max_quantity?: number | null
+          sort_order?: number
+          is_active?: boolean
+          is_deleted?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "load_items_load_group_id_fkey"
+            columns: ["load_group_id"]
+            isOneToOne: false
+            referencedRelation: "load_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_sections: {
+        Row: {
+          id: string
+          project_id: string
+          kind: Database["public"]["Enums"]["project_section_kind"]
+          layout: Database["public"]["Enums"]["project_section_layout"]
+          heading: string | null
+          content_md: string | null
+          image_url: string | null
+          image_alt: string | null
+          caption: string | null
+          sort_order: number
+          is_active: boolean
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          kind?: Database["public"]["Enums"]["project_section_kind"]
+          layout?: Database["public"]["Enums"]["project_section_layout"]
+          heading?: string | null
+          content_md?: string | null
+          image_url?: string | null
+          image_alt?: string | null
+          caption?: string | null
+          sort_order?: number
+          is_active?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          kind?: Database["public"]["Enums"]["project_section_kind"]
+          layout?: Database["public"]["Enums"]["project_section_layout"]
+          heading?: string | null
+          content_md?: string | null
+          image_url?: string | null
+          image_alt?: string | null
+          caption?: string | null
+          sort_order?: number
+          is_active?: boolean
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_sections_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          id: string
+          title: string
+          slug: string
+          summary: string | null
+          cover_image_url: string | null
+          client_name: string | null
+          location: string | null
+          completed_at: string | null
+          is_featured: boolean
+          is_active: boolean
+          is_deleted: boolean
+          sort_order: number
+          published_at: string | null
+          seo_title: string | null
+          seo_description: string | null
+          metadata: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          slug: string
+          summary?: string | null
+          cover_image_url?: string | null
+          client_name?: string | null
+          location?: string | null
+          completed_at?: string | null
+          is_featured?: boolean
+          is_active?: boolean
+          is_deleted?: boolean
+          sort_order?: number
+          published_at?: string | null
+          seo_title?: string | null
+          seo_description?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          slug?: string
+          summary?: string | null
+          cover_image_url?: string | null
+          client_name?: string | null
+          location?: string | null
+          completed_at?: string | null
+          is_featured?: boolean
+          is_active?: boolean
+          is_deleted?: boolean
+          sort_order?: number
+          published_at?: string | null
+          seo_title?: string | null
+          seo_description?: string | null
+          metadata?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -1003,6 +1511,33 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculator_match_rules: {
+        Args: { p_meta?: Json; p_total_load: number }
+        Returns: {
+          headline: string
+          max_load: number
+          min_load: number
+          name: string
+          note: string
+          priority: number
+          rule_id: string
+        }[]
+      }
+      calculator_suggested_products: {
+        Args: { p_meta?: Json; p_total_load: number }
+        Returns: {
+          is_primary: boolean
+          note: string
+          product_id: string
+          rule_headline: string
+          rule_id: string
+          rule_name: string
+          rule_note: string
+          rule_priority: number
+          sort_order: number
+          variant_id: string
+        }[]
+      }
       admin_customers_all: {
         Args: { p_search?: string }
         Returns: {
@@ -1029,6 +1564,20 @@ export type Database = {
     }
     Enums: {
       attribute_data_type: "text" | "number" | "boolean" | "select"
+      calculator_condition_operator:
+        | "between"
+        | "eq"
+        | "neq"
+        | "in"
+        | "contains"
+      calculator_field_type:
+        | "slider"
+        | "dropdown"
+        | "input"
+        | "radio"
+        | "checkbox"
+      project_section_kind: "text" | "image"
+      project_section_layout: "full" | "left" | "right"
       order_status:
         | "pending"
         | "accepted"

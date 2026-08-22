@@ -5,7 +5,7 @@ import { absoluteUrl } from "@/lib/seo";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = createPublicClient();
 
-  const [categoriesResponse, productsResponse, contentPagesResponse] = await Promise.all([
+  const [categoriesResponse, productsResponse, contentPagesResponse, projectsResponse] = await Promise.all([
     supabase
       .from("categories")
       .select("id,slug,created_at,is_active,is_deleted")
@@ -25,11 +25,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .select("slug,created_at,is_active")
       .eq("is_active", true)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("projects")
+      .select("slug,updated_at,created_at,is_active,is_deleted")
+      .eq("is_active", true)
+      .eq("is_deleted", false)
+      .order("created_at", { ascending: false }),
   ]);
 
   const categories = categoriesResponse.data || [];
   const productsRaw = productsResponse.data || [];
   const contentPages = contentPagesResponse.data || [];
+  const projects = projectsResponse.data || [];
 
   const activeCategoryIdSet = new Set(categories.map((category) => category.id));
   const products = productsRaw.filter(
@@ -42,6 +49,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: new Date(),
       changeFrequency: "daily",
       priority: 1,
+    },
+    {
+      url: absoluteUrl("/projects"),
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
+    {
+      url: absoluteUrl("/load-calculator"),
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.7,
     },
   ];
 
@@ -66,5 +85,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticRoutes, ...categoryRoutes, ...productRoutes, ...contentPageRoutes];
+  const projectRoutes: MetadataRoute.Sitemap = projects.map((project) => ({
+    url: absoluteUrl(`/projects/${project.slug}`),
+    lastModified: project.updated_at
+      ? new Date(project.updated_at)
+      : project.created_at
+        ? new Date(project.created_at)
+        : new Date(),
+    changeFrequency: "monthly",
+    priority: 0.6,
+  }));
+
+  return [
+    ...staticRoutes,
+    ...categoryRoutes,
+    ...productRoutes,
+    ...contentPageRoutes,
+    ...projectRoutes,
+  ];
 }

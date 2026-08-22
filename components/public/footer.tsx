@@ -139,6 +139,28 @@ export async function Footer() {
                     </div>
 
                     <div className="space-y-4 lg:col-span-2">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Explore</h3>
+                        <ul className="space-y-2">
+                            <li>
+                                <Link
+                                    href="/projects"
+                                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    Projects
+                                </Link>
+                            </li>
+                            <li>
+                                <Link
+                                    href="/load-calculator"
+                                    className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                                >
+                                    Load Calculator
+                                </Link>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div className="space-y-4 lg:col-span-2">
                         <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Legal</h3>
                         {footerPages.length > 0 ? (
                             <ul className="space-y-2">

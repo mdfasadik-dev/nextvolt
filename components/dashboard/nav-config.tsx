@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, Layers3, ShoppingCart, Users2, Settings, Tags, Boxes, FileText, CircleDot, Store, Megaphone, Database } from "lucide-react";
+import { LayoutDashboard, Package, Layers3, ShoppingCart, Users2, Settings, Tags, Boxes, FileText, CircleDot, Store, Megaphone, Database, Calculator, LayoutTemplate } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type NavItem = {
@@ -36,6 +36,8 @@ export const mainNav: NavItem[] = [
     //     ],
     // },
     { title: "Promotions", href: "/admin/promotions", icon: Megaphone },
+    { title: "Projects", href: "/admin/projects", icon: LayoutTemplate },
+    { title: "Load Calculator", href: "/admin/load-calculator", icon: Calculator },
     { title: "Pages", href: "/admin/pages", icon: FileText },
 ];
 

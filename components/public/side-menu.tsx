@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Calculator, LayoutTemplate } from "lucide-react";
 import type { PublicCategory } from "@/lib/services/public/categoryPublicService";
 
 export interface SideMenuProps { categories: PublicCategory[] }
@@ -67,14 +67,50 @@ export function SideMenu({ categories }: SideMenuProps) {
         );
     }
 
-    if (!tree.length) return <div className="text-xs text-muted-foreground p-3">No categories</div>;
+    const siteLinks = (
+        <div className="pb-3">
+            <h3 className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Explore</h3>
+            <ul className="space-y-0.5">
+                <li>
+                    <Link
+                        href="/projects"
+                        className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-accent/40"
+                    >
+                        <LayoutTemplate className="h-4 w-4 text-muted-foreground" />
+                        Projects
+                    </Link>
+                </li>
+                <li>
+                    <Link
+                        href="/load-calculator"
+                        className="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-accent/40"
+                    >
+                        <Calculator className="h-4 w-4 text-muted-foreground" />
+                        Load Calculator
+                    </Link>
+                </li>
+            </ul>
+        </div>
+    );
+
+    if (!tree.length) {
+        return (
+            <nav aria-label="Site" className="text-foreground text-sm">
+                {siteLinks}
+                <div className="border-t p-3 text-xs text-muted-foreground">No categories</div>
+            </nav>
+        );
+    }
 
     return (
-        <nav aria-label="Categories" className="text-foreground text-sm">
-            <h3 className="px-2 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</h3>
-            <ul className="space-y-0.5">
-                {tree.map(n => <Node key={n.id} node={n} depth={0} />)}
-            </ul>
+        <nav aria-label="Site" className="text-foreground text-sm">
+            {siteLinks}
+            <div className="border-t pt-3">
+                <h3 className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Catalog</h3>
+                <ul className="space-y-0.5">
+                    {tree.map(n => <Node key={n.id} node={n} depth={0} />)}
+                </ul>
+            </div>
         </nav>
     );
 }

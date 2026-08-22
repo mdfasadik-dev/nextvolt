@@ -7,6 +7,7 @@ import { CategoryTopBar } from "./category-top-bar";
 import { CartDrawer } from "@/components/cart/cart-drawer";
 import { ProductSearchBar } from "@/components/search/product-search-bar";
 import { ProfileNavButton } from "./profile-nav-button";
+import { SiteNavLinks } from "./site-nav-links";
 
 export async function PublicNav() {
     const store = await StoreService.getFirst();
@@ -38,8 +39,9 @@ export async function PublicNav() {
             </nav>
 
             <nav className="relative z-10 hidden w-full justify-center border-b border-foreground/10 py-1 md:flex">
-                <div className="w-full max-w-6xl px-4">
-                    <CategoryTopBar mode="inline" className="w-full" />
+                <div className="flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-2 px-4">
+                    <SiteNavLinks />
+                    <CategoryTopBar mode="inline" className="w-auto" />
                 </div>
             </nav>
 

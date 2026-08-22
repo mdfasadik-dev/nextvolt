@@ -380,9 +380,9 @@ function PaginationControls({ page, pageSize, total, disabled, onPageChange }: {
             <button type="button" disabled={!canPrev || disabled} onClick={() => go(page - 1)} className="h-8 px-2 text-xs rounded-md border disabled:opacity-40">Prev</button>
             <ul className="flex items-center gap-1">
                 {pages.map((p, idx) => p === 'ellipsis' ? (
-                    <li key={idx} className="text-xs text-muted-foreground px-1">…</li>
+                    <li key={`ellipsis-${idx}`} className="text-xs text-muted-foreground px-1">…</li>
                 ) : (
-                    <li key={p}>
+                    <li key={`page-${p}`}>
                         <button
                             type="button"
                             onClick={() => go(p)}
