@@ -110,7 +110,7 @@ export function ProductCombobox({
                 )}
                 onClick={() => setOpen(prev => !prev)}
             >
-                <span className="truncate">{renderLabel}</span>
+                <span className="min-w-0 flex-1 truncate text-left">{renderLabel}</span>
                 <span className="flex items-center gap-1 text-muted-foreground">
                     {allowClear && value && !disabled && (
                         <X
@@ -165,11 +165,11 @@ export function ProductCombobox({
                                             setOpen(false);
                                         }}
                                     >
-                                        <div className="flex flex-col truncate">
+                                        <div className="flex min-w-0 flex-1 flex-col">
                                             <span className="truncate font-medium">{option.name}</span>
                                             {description && <span className="truncate text-xs text-muted-foreground">{description}</span>}
                                         </div>
-                                        {isActive && <Check className="h-4 w-4" />}
+                                        {isActive && <Check className="h-4 w-4 shrink-0" />}
                                     </button>
                                 );
                             })

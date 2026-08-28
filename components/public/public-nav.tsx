@@ -10,7 +10,7 @@ import { ProfileNavButton } from "./profile-nav-button";
 import { SiteNavLinks } from "./site-nav-links";
 
 export async function PublicNav() {
-    const store = await StoreService.getFirst();
+    const store = await StoreService.getFirstPublic();
 
     return (
         <div className="sticky top-0 z-50 w-full bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/70">

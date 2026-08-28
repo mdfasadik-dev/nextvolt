@@ -344,7 +344,7 @@ export function RulesTab({
             </CardContent>
 
             <Dialog open={Boolean(form)} onOpenChange={open => !open && setForm(null)}>
-                <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+                <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto overflow-x-hidden">
                     <DialogHeader>
                         <DialogTitle>{form?.id ? "Edit Rule" : "New Rule"}</DialogTitle>
                         <DialogDescription>
@@ -619,7 +619,7 @@ export function RulesTab({
                             <div className="space-y-2 rounded-md border p-3">
                                 <Label>Suggested products</Label>
                                 <div className="flex items-end gap-2">
-                                    <div className="flex-1">
+                                    <div className="min-w-0 flex-1">
                                         <ProductCombobox
                                             value={picker}
                                             onChange={setPicker}

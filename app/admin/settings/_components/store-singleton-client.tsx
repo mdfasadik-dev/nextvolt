@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ImagePlus, Loader2, Trash2 } from 'lucide-react';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { IMAGE_PRESETS } from '@/lib/constants/image-presets';
 import { StorageService } from '@/lib/services/storageService';
 import Image from 'next/image';
 import { useToast } from '@/components/ui/toast-provider';
@@ -88,11 +89,13 @@ export function StoreSingletonClient({ initial }: Props) {
         setOpeningHours(normalizeOpeningHours(initial?.opening_hours));
     }, [initial]);
 
+    const cropper = useImageCropper(IMAGE_PRESETS.logo);
+
     function pick(kind: 'light' | 'dark') {
-        const input = document.createElement('input');
-        input.type = 'file'; input.accept = 'image/*';
-        input.onchange = () => { if (input.files && input.files[0]) { const f = input.files[0]; ensureImageUnder1MB(f).then(() => { if (kind === 'light') { setPickedLight(f); setRemoveLight(false); } else { setPickedDark(f); setRemoveDark(false); } }).catch(err => toast.push({ variant: 'error', title: 'Logo error', description: err?.message })); } };
-        input.click();
+        cropper.pick(f => {
+            if (kind === 'light') { setPickedLight(f); setRemoveLight(false); }
+            else { setPickedDark(f); setRemoveDark(false); }
+        });
     }
 
     async function save(section?: string) {
@@ -192,6 +195,7 @@ export function StoreSingletonClient({ initial }: Props) {
                     <Button onClick={() => save('Branding')} size="sm" disabled={saving}>{saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}Save Branding</Button>
                 </TabsContent>
             </Tabs>
+            {cropper.cropperUi}
         </div>
     );
 }

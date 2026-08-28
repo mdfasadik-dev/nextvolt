@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Loader2, Zap } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Plus, Pencil, Trash2, Loader2, Zap, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,14 +18,18 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageLoadingOverlay } from "@/components/ui/page-loading-overlay";
 import { IconPicker } from "@/components/ui/icon-picker";
 import { getLoadIcon } from "@/lib/constants/load-icons";
+import { moveItemWithPlacement } from "@/lib/utils/reorder";
 import type { LoadGroupWithItems, LoadItem } from "@/lib/services/loadCalculatorService";
 import {
     createLoadGroup,
     createLoadItem,
     deleteLoadGroup,
     deleteLoadItem,
+    reorderLoadGroups,
+    reorderLoadItems,
     updateLoadGroup,
     updateLoadItem,
 } from "../actions";
@@ -73,6 +77,8 @@ function GroupIcon({ iconKey }: { iconKey: string | null }) {
     return <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={1.75} />;
 }
 
+type DropTarget = { id: string; placement: "before" | "after" } | null;
+
 export function LoadGroupsTab({ groups }: { groups: LoadGroupWithItems[] }) {
     const toast = useToast();
     const [isPending, startTransition] = useTransition();
@@ -82,10 +88,76 @@ export function LoadGroupsTab({ groups }: { groups: LoadGroupWithItems[] }) {
     const [itemForm, setItemForm] = useState<ItemForm | null>(null);
     const [confirm, setConfirm] = useState<{ kind: "group" | "item"; id: string; name: string } | null>(null);
 
+    // Local copy so a drag can reorder optimistically; re-synced whenever the
+    // server sends fresh data after a revalidate.
+    const [records, setRecords] = useState<LoadGroupWithItems[]>(groups);
+    useEffect(() => setRecords(groups), [groups]);
+
+    const [reordering, setReordering] = useState(false);
+    const [dragGroupId, setDragGroupId] = useState<string | null>(null);
+    const [groupDropTarget, setGroupDropTarget] = useState<DropTarget>(null);
+    const [dragItemId, setDragItemId] = useState<string | null>(null);
+    const [itemDropTarget, setItemDropTarget] = useState<DropTarget>(null);
+
+    const reorderDisabled = isPending || reordering;
+
     const selected = useMemo(
-        () => groups.find(group => group.id === selectedId) || groups[0] || null,
-        [groups, selectedId],
+        () => records.find(group => group.id === selectedId) || records[0] || null,
+        [records, selectedId],
     );
+
+    async function handleGroupReorder(dragId: string, targetId: string, placement: "before" | "after") {
+        if (reorderDisabled) return;
+        const previous = records;
+        const fromIndex = records.findIndex(group => group.id === dragId);
+        const toIndex = records.findIndex(group => group.id === targetId);
+        const next = moveItemWithPlacement(records, fromIndex, toIndex, placement);
+        if (next === previous) return;
+
+        setRecords(next);
+        setReordering(true);
+        try {
+            await reorderLoadGroups(next.map((group, index) => ({ id: group.id, sort_order: index })));
+        } catch (error) {
+            setRecords(previous);
+            toast.push({
+                variant: "error",
+                title: "Reorder failed",
+                description: errorMessage(error, "Unable to update group order"),
+            });
+        } finally {
+            setReordering(false);
+        }
+    }
+
+    async function handleItemReorder(dragId: string, targetId: string, placement: "before" | "after") {
+        if (reorderDisabled || !selected) return;
+        const previous = records;
+        const items = selected.load_items;
+        const fromIndex = items.findIndex(item => item.id === dragId);
+        const toIndex = items.findIndex(item => item.id === targetId);
+        const nextItems = moveItemWithPlacement(items, fromIndex, toIndex, placement);
+        if (nextItems === items) return;
+
+        setRecords(current =>
+            current.map(group =>
+                group.id === selected.id ? { ...group, load_items: nextItems } : group,
+            ),
+        );
+        setReordering(true);
+        try {
+            await reorderLoadItems(nextItems.map((item, index) => ({ id: item.id, sort_order: index })));
+        } catch (error) {
+            setRecords(previous);
+            toast.push({
+                variant: "error",
+                title: "Reorder failed",
+                description: errorMessage(error, "Unable to update load order"),
+            });
+        } finally {
+            setReordering(false);
+        }
+    }
 
     function saveGroup() {
         if (!groupForm) return;
@@ -171,22 +243,63 @@ export function LoadGroupsTab({ groups }: { groups: LoadGroupWithItems[] }) {
                 <CardHeader className="flex-row items-center justify-between space-y-0">
                     <div>
                         <CardTitle className="text-base">Load Groups</CardTitle>
-                        <CardDescription className="text-xs">Each group defines its own unit.</CardDescription>
+                        <CardDescription className="text-xs">Each group defines its own unit. Drag to reorder.</CardDescription>
                     </div>
                     <Button size="sm" onClick={() => setGroupForm({ ...emptyGroup })} disabled={isPending}>
                         <Plus className="mr-1 h-4 w-4" /> New
                     </Button>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                    {groups.length === 0 && (
+                    {records.length === 0 && (
                         <p className="py-6 text-center text-sm text-muted-foreground">No groups yet.</p>
                     )}
-                    {groups.map(group => (
+                    {records.map(group => (
                         <div
                             key={group.id}
-                            className={`rounded-md border p-3 ${group.id === selected?.id ? "border-primary bg-primary/5" : "bg-card"}`}
+                            draggable={!reorderDisabled}
+                            onDragStart={() => setDragGroupId(group.id)}
+                            onDragEnd={() => {
+                                setDragGroupId(null);
+                                setGroupDropTarget(null);
+                            }}
+                            onDragOver={event => {
+                                if (reorderDisabled || !dragGroupId || dragGroupId === group.id) return;
+                                event.preventDefault();
+                                const rect = event.currentTarget.getBoundingClientRect();
+                                const placement =
+                                    event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                                setGroupDropTarget({ id: group.id, placement });
+                            }}
+                            onDrop={event => {
+                                event.preventDefault();
+                                if (reorderDisabled || !dragGroupId || dragGroupId === group.id) return;
+                                const placement =
+                                    groupDropTarget?.id === group.id ? groupDropTarget.placement : "before";
+                                void handleGroupReorder(dragGroupId, group.id, placement);
+                                setDragGroupId(null);
+                                setGroupDropTarget(null);
+                            }}
+                            className={`rounded-md border p-3 transition-colors ${
+                                group.id === selected?.id ? "border-primary bg-primary/5" : "bg-card"
+                            } ${dragGroupId === group.id ? "opacity-60" : ""} ${
+                                groupDropTarget?.id === group.id && groupDropTarget.placement === "before"
+                                    ? "border-t-2 border-t-primary"
+                                    : ""
+                            } ${
+                                groupDropTarget?.id === group.id && groupDropTarget.placement === "after"
+                                    ? "border-b-2 border-b-primary"
+                                    : ""
+                            }`}
                         >
                             <div className="flex items-start gap-2">
+                                <span
+                                    title="Drag to reorder"
+                                    className={`mt-0.5 inline-flex shrink-0 items-center justify-center text-muted-foreground ${
+                                        reorderDisabled ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing"
+                                    }`}
+                                >
+                                    <GripVertical className="h-4 w-4" />
+                                </span>
                                 <button
                                     type="button"
                                     className="flex flex-1 items-start gap-2 text-left"
@@ -249,7 +362,7 @@ export function LoadGroupsTab({ groups }: { groups: LoadGroupWithItems[] }) {
                         </CardTitle>
                         <CardDescription className="text-xs">
                             {selected
-                                ? `Values are in ${selected.unit_name} (${selected.unit_symbol}).`
+                                ? `Values are in ${selected.unit_name} (${selected.unit_symbol}). Drag to reorder.`
                                 : "Select a group first."}
                         </CardDescription>
                     </div>
@@ -280,9 +393,56 @@ export function LoadGroupsTab({ groups }: { groups: LoadGroupWithItems[] }) {
                     ) : (
                         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                             {selected.load_items.map((item: LoadItem) => (
-                                <div key={item.id} className="rounded-md border p-3">
+                                <div
+                                    key={item.id}
+                                    draggable={!reorderDisabled}
+                                    onDragStart={() => setDragItemId(item.id)}
+                                    onDragEnd={() => {
+                                        setDragItemId(null);
+                                        setItemDropTarget(null);
+                                    }}
+                                    onDragOver={event => {
+                                        if (reorderDisabled || !dragItemId || dragItemId === item.id) return;
+                                        event.preventDefault();
+                                        // Cards sit in a grid, so use the horizontal midpoint.
+                                        const rect = event.currentTarget.getBoundingClientRect();
+                                        const placement =
+                                            event.clientX < rect.left + rect.width / 2 ? "before" : "after";
+                                        setItemDropTarget({ id: item.id, placement });
+                                    }}
+                                    onDrop={event => {
+                                        event.preventDefault();
+                                        if (reorderDisabled || !dragItemId || dragItemId === item.id) return;
+                                        const placement =
+                                            itemDropTarget?.id === item.id ? itemDropTarget.placement : "before";
+                                        void handleItemReorder(dragItemId, item.id, placement);
+                                        setDragItemId(null);
+                                        setItemDropTarget(null);
+                                    }}
+                                    className={`rounded-md border p-3 transition-colors ${
+                                        dragItemId === item.id ? "opacity-60" : ""
+                                    } ${
+                                        itemDropTarget?.id === item.id && itemDropTarget.placement === "before"
+                                            ? "border-l-2 border-l-primary"
+                                            : ""
+                                    } ${
+                                        itemDropTarget?.id === item.id && itemDropTarget.placement === "after"
+                                            ? "border-r-2 border-r-primary"
+                                            : ""
+                                    }`}
+                                >
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex min-w-0 items-start gap-2">
+                                            <span
+                                                title="Drag to reorder"
+                                                className={`mt-0.5 inline-flex shrink-0 items-center justify-center text-muted-foreground ${
+                                                    reorderDisabled
+                                                        ? "cursor-not-allowed opacity-40"
+                                                        : "cursor-grab active:cursor-grabbing"
+                                                }`}
+                                            >
+                                                <GripVertical className="h-4 w-4" />
+                                            </span>
                                             <GroupIcon iconKey={item.icon} />
                                             <div className="min-w-0">
                                                 <p className="truncate text-sm font-medium">{item.name}</p>
@@ -499,6 +659,12 @@ export function LoadGroupsTab({ groups }: { groups: LoadGroupWithItems[] }) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <PageLoadingOverlay
+                open={reordering}
+                title="Saving order..."
+                description="Please wait while the new order is being applied."
+            />
 
             <ConfirmDialog
                 open={Boolean(confirm)}

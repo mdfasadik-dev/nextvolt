@@ -1,6 +1,5 @@
 "use client";
 
-import { useRef, useState } from "react";
 import Image from "next/image";
 import {
     AlignLeft,
@@ -8,7 +7,6 @@ import {
     ChevronUp,
     Columns2,
     ImageIcon,
-    Loader2,
     RectangleHorizontal,
     Trash2,
     Type as TypeIcon,
@@ -18,10 +16,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
-import { StorageService } from "@/lib/services/storageService";
-import { useToast } from "@/components/ui/toast-provider";
 import { cn } from "@/lib/utils";
-import type { SectionDraft } from "./builder-types";
+import { sectionImageSrc, type SectionDraft } from "./builder-types";
+import { useImageCropper } from "@/lib/hooks/useImageCropper";
+import { IMAGE_PRESETS } from "@/lib/constants/image-presets";
 import type { SectionInput } from "../actions";
 
 const LAYOUT_CHOICES: Array<{
@@ -49,26 +47,19 @@ export function SectionInspector({
     onMove: (direction: -1 | 1) => void;
     onRemove: () => void;
 }) {
-    const toast = useToast();
-    const fileRef = useRef<HTMLInputElement | null>(null);
-    const [uploading, setUploading] = useState(false);
+    const cropper = useImageCropper(IMAGE_PRESETS.projectSection);
 
-    async function handleFile(file: File) {
-        setUploading(true);
-        try {
-            const { publicUrl } = await StorageService.uploadEntityImage("projects", file);
-            onChange({ image_url: publicUrl });
-            toast.push({ variant: "success", title: "Image uploaded" });
-        } catch (error) {
-            toast.push({
-                variant: "error",
-                title: error instanceof Error ? error.message : "Upload failed",
-            });
-        } finally {
-            setUploading(false);
-            if (fileRef.current) fileRef.current.value = "";
-        }
+    /**
+     * Only stage the cropped file locally — the actual upload happens once,
+     * when the project is saved. Keeps abandoned edits from littering storage.
+     */
+    function handleFile(file: File) {
+        if (section.previewUrl) URL.revokeObjectURL(section.previewUrl);
+        onChange({ pendingFile: file, previewUrl: URL.createObjectURL(file) });
     }
+
+    const imageSrc = sectionImageSrc(section);
+    const hasImage = Boolean(imageSrc);
 
     return (
         <div className="flex h-full flex-col">
@@ -204,22 +195,13 @@ export function SectionInspector({
                     </>
                 ) : (
                     <>
-                        <input
-                            ref={fileRef}
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={event => {
-                                const file = event.target.files?.[0];
-                                if (file) void handleFile(file);
-                            }}
-                        />
                         <div className="space-y-2">
                             <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">Image</Label>
-                            {section.image_url ? (
+                            {imageSrc ? (
                                 <div className="relative aspect-[16/10] w-full overflow-hidden rounded-lg border bg-muted">
                                     <Image
-                                        src={section.image_url}
+                                        src={imageSrc}
+                                        unoptimized
                                         alt={section.image_alt || "Section image"}
                                         fill
                                         sizes="320px"
@@ -229,38 +211,41 @@ export function SectionInspector({
                             ) : (
                                 <button
                                     type="button"
-                                    onClick={() => fileRef.current?.click()}
+                                    onClick={() => cropper.pick(handleFile)}
                                     className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-xs text-muted-foreground hover:bg-muted/50"
                                 >
                                     <Upload className="h-5 w-5" />
                                     Click to upload
                                 </button>
                             )}
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                                 <Button
                                     type="button"
                                     size="sm"
                                     variant="outline"
-                                    disabled={uploading}
-                                    onClick={() => fileRef.current?.click()}
+                                    onClick={() => cropper.pick(handleFile)}
                                 >
-                                    {uploading ? (
-                                        <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                    ) : (
-                                        <Upload className="mr-1 h-3.5 w-3.5" />
-                                    )}
-                                    {section.image_url ? "Replace" : "Upload"}
+                                    <Upload className="mr-1 h-3.5 w-3.5" />
+                                    {hasImage ? "Replace" : "Choose image"}
                                 </Button>
-                                {section.image_url && (
+                                {hasImage && (
                                     <Button
                                         type="button"
                                         size="sm"
                                         variant="ghost"
                                         className="text-destructive"
-                                        onClick={() => onChange({ image_url: null })}
+                                        onClick={() => {
+                                            if (section.previewUrl) URL.revokeObjectURL(section.previewUrl);
+                                            onChange({ image_url: null, pendingFile: null, previewUrl: null });
+                                        }}
                                     >
                                         Remove
                                     </Button>
+                                )}
+                                {section.pendingFile && (
+                                    <span className="text-[11px] text-muted-foreground">
+                                        Will upload on save
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -287,6 +272,7 @@ export function SectionInspector({
                     </>
                 )}
             </div>
+            {cropper.cropperUi}
         </div>
     );
 }

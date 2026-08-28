@@ -4,6 +4,7 @@ import { CategoryService } from "@/lib/services/categoryService";
 import { ProductAttributeValueService } from "@/lib/services/productAttributeValueService";
 import { ProductImageService } from "@/lib/services/productImageService";
 import { ProductBadgeService, type ProductBadgeInput } from "@/lib/services/productBadgeService";
+import { InventoryService } from "@/lib/services/inventoryService";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { unstable_noStore as noStore } from "next/cache";
@@ -70,7 +71,47 @@ type ProductPayload = {
     image_urls?: string[];
     badge?: ProductBadgeInput | null;
     attributeValues?: { attribute_id: string; value: string | number | boolean | null }[];
+    /**
+     * Optional opening stock, created in the same step so the admin does not
+     * have to visit the Inventory page after adding a product.
+     */
+    inventory?: ProductInventoryInput | null;
 };
+
+export type ProductInventoryInput = {
+    quantity: number;
+    purchase_price: number;
+    sale_price: number;
+    unit?: string;
+    discount_type?: "none" | "percent" | "amount";
+    discount_value?: number | null;
+};
+
+/** Mirrors the validation in the standalone inventory action. */
+function normalizeInventory(input: ProductInventoryInput) {
+    const discount_type = input.discount_type || "none";
+    let discount_value = input.discount_value ?? 0;
+    if (discount_type === "none") {
+        discount_value = 0;
+    } else {
+        if (discount_value < 0) throw new Error("Discount cannot be negative");
+        if (discount_type === "percent" && discount_value > 100) {
+            throw new Error("Percent discount must be between 0 and 100");
+        }
+    }
+    if (input.quantity < 0) throw new Error("Quantity cannot be negative");
+    if (input.purchase_price < 0 || input.sale_price < 0) {
+        throw new Error("Prices cannot be negative");
+    }
+    return {
+        quantity: Math.trunc(input.quantity),
+        purchase_price: input.purchase_price,
+        sale_price: input.sale_price,
+        unit: input.unit || "pcs",
+        discount_type,
+        discount_value,
+    };
+}
 
 export async function listProductBadgeMap(productIds: string[]) {
     noStore();
@@ -86,7 +127,11 @@ export async function createProduct(payload: ProductPayload) {
     if (rec) await ProductImageService.syncProductImages(rec.id, payload.image_urls || (payload.main_image_url ? [payload.main_image_url] : []));
     if (rec) await ProductBadgeService.syncProductBadge(rec.id, payload.badge || null);
     if (rec && payload.attributeValues?.length) await ProductAttributeValueService.upsertValues(rec.id, payload.attributeValues);
+    if (rec && payload.inventory) {
+        await InventoryService.create({ product_id: rec.id, variant_id: null, ...normalizeInventory(payload.inventory) });
+    }
     revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
     revalidatePath("/");
     return rec;
 }

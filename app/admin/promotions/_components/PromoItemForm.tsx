@@ -18,16 +18,19 @@ import { Tables } from '@/lib/types/supabase';
 import { toast } from 'sonner';
 import { Pencil, Plus, Trash2, ImagePlus, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { promotionPreset } from '@/lib/constants/image-presets';
 import { StorageService } from '@/lib/services/storageService';
 
 interface PromoItemFormProps {
     promotionId: string;
     item?: Tables<'promotion_items'> | null;
     triggerButton?: React.ReactNode;
+    /** Drives the crop ratio so it matches how the slide renders publicly. */
+    promotionType?: string | null;
 }
 
-export function PromoItemForm({ promotionId, item, triggerButton }: PromoItemFormProps) {
+export function PromoItemForm({ promotionId, item, triggerButton, promotionType }: PromoItemFormProps) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -47,16 +50,11 @@ export function PromoItemForm({ promotionId, item, triggerButton }: PromoItemFor
     const [ctaUrl, setCtaUrl] = useState(item?.cta_url || '');
     const [sortOrder, setSortOrder] = useState(item?.sort_order || 0);
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            ensureImageUnder1MB(file).then(() => {
-                setPickedFile(file);
-                setPreviewUrl(URL.createObjectURL(file));
-            }).catch(err => {
-                toast.error(err.message);
-            });
-        }
+    const cropper = useImageCropper(promotionPreset(promotionType ?? null));
+
+    const handleCropped = (file: File) => {
+        setPickedFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -168,11 +166,14 @@ export function PromoItemForm({ promotionId, item, triggerButton }: PromoItemFor
                                 )}
                             </div>
                             <div className="space-y-2 flex-1">
-                                <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80">
+                                <button
+                                    type="button"
+                                    onClick={() => cropper.pick(handleCropped)}
+                                    className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-md text-sm hover:bg-secondary/80"
+                                >
                                     <ImagePlus className="w-4 h-4" />
                                     <span>Pick Image</span>
-                                    <input type="file" className="hidden" accept="image/*" onChange={handleFileSelect} />
-                                </label>
+                                </button>
                                 <div className="text-xs text-muted-foreground">Or enter URL manually:</div>
                                 <Input
                                     value={imageUrl}
@@ -209,6 +210,7 @@ export function PromoItemForm({ promotionId, item, triggerButton }: PromoItemFor
                         </Button>
                     </DialogFooter>
                 </form>
+                {cropper.cropperUi}
             </DialogContent>
         </Dialog>
     );

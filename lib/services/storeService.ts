@@ -1,4 +1,4 @@
-import { createClient, createAdminClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient, createPublicClient } from '@/lib/supabase/server';
 import { Tables } from '@/lib/types/supabase';
 import { SUPABASE_SERVICE_ROLE_KEY } from '@/lib/env';
 
@@ -36,6 +36,27 @@ export class StoreService {
     static async getFirst(): Promise<Store | null> {
         const supabase = await createClient();
         const { data, error } = await supabase.from('stores').select('*').order('created_at', { ascending: true }).limit(1).maybeSingle();
+        if (error) throw error;
+        return data as Store | null;
+    }
+
+    /**
+     * Cookie-free read of the store singleton for public pages.
+     *
+     * getFirst() uses the cookie-bound client, which marks any caller as
+     * dynamic. Because the nav and footer render inside the public layout,
+     * that opted every ISR page into request scope and made on-demand
+     * renders fail with DYNAMIC_SERVER_USAGE. Store data is the same for
+     * everyone, so read it with the anon client instead.
+     */
+    static async getFirstPublic(): Promise<Store | null> {
+        const supabase = createPublicClient();
+        const { data, error } = await supabase
+            .from('stores')
+            .select('*')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
         if (error) throw error;
         return data as Store | null;
     }

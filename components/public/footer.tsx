@@ -9,7 +9,7 @@ type OpeningHoursMap = Record<string, OpeningHoursSlot[]>;
 export async function Footer() {
     const year = new Date().getFullYear();
     const [store, footerPages] = await Promise.all([
-        StoreService.getFirst(),
+        StoreService.getFirstPublic(),
         ContentPageService.listPublicFooter(),
     ]);
 

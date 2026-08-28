@@ -4,7 +4,6 @@ import type { Product } from '@/lib/services/productService';
 import type { Category } from '@/lib/services/categoryService';
 import type { Attribute } from '@/lib/services/attributeService';
 import { StorageService } from '@/lib/services/storageService';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
 import { DEFAULT_PRODUCT_BADGE_COLOR, type ProductBadgeColor } from '@/lib/constants/product-badge';
 
 export interface ProductFormValues {
@@ -28,11 +27,14 @@ export interface ProductFormValues {
     description: string | null;
     details_md: string | null;
     attributeValues?: { attribute_id: string; value: string | number | boolean | null }[];
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-    if (error instanceof Error && error.message) return error.message;
-    return fallback;
+    inventory?: {
+        quantity: number;
+        purchase_price: number;
+        sale_price: number;
+        unit: string;
+        discount_type: "none" | "percent" | "amount";
+        discount_value: number;
+    } | null;
 }
 
 type ProductWithImages = Product & {
@@ -92,6 +94,14 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
     const [badgeStartsAt, setBadgeStartsAt] = useState('');
     const [badgeEndsAt, setBadgeEndsAt] = useState('');
     const [badgeIsActive, setBadgeIsActive] = useState(true);
+    // Opening stock captured alongside the product on create.
+    const [invEnabled, setInvEnabled] = useState(true);
+    const [invQuantity, setInvQuantity] = useState('0');
+    const [invPurchasePrice, setInvPurchasePrice] = useState('0');
+    const [invSalePrice, setInvSalePrice] = useState('0');
+    const [invUnit, setInvUnit] = useState('pcs');
+    const [invDiscountType, setInvDiscountType] = useState<'none' | 'percent' | 'amount'>('none');
+    const [invDiscountValue, setInvDiscountValue] = useState('0');
     const [submitting, setSubmitting] = useState(false);
     const [uploading, setUploading] = useState(false); // during submit
     const [imageWarning, setImageWarning] = useState<string | null>(null);
@@ -137,6 +147,13 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
             setBadgeStartsAt('');
             setBadgeEndsAt('');
             setBadgeIsActive(true);
+            setInvEnabled(true);
+            setInvQuantity('0');
+            setInvPurchasePrice('0');
+            setInvSalePrice('0');
+            setInvUnit('pcs');
+            setInvDiscountType('none');
+            setInvDiscountValue('0');
         }
     }, [editing, categories]);
 
@@ -234,6 +251,18 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
                 description: (fd.get('description') as string) || null,
                 details_md: detailsMd.trim() ? detailsMd : null,
                 attributeValues: buildAttributeValues(),
+                // Inventory is only created with the product; edits go through
+                // the Inventory page so existing stock is never overwritten.
+                inventory: !editingRef && invEnabled
+                    ? {
+                        quantity: Number(invQuantity || 0),
+                        purchase_price: Number(invPurchasePrice || 0),
+                        sale_price: Number(invSalePrice || 0),
+                        unit: invUnit.trim() || 'pcs',
+                        discount_type: invDiscountType,
+                        discount_value: invDiscountType === 'none' ? 0 : Number(invDiscountValue || 0),
+                    }
+                    : null,
             };
             if (editingRef) await onUpdate(editingRef.id, payload); else await onCreate(payload);
 
@@ -267,6 +296,13 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
                 setSelectedAttrIds([]);
                 setAttributeValues({});
                 setDetailsMd('');
+                setInvEnabled(true);
+                setInvQuantity('0');
+                setInvPurchasePrice('0');
+                setInvSalePrice('0');
+                setInvUnit('pcs');
+                setInvDiscountType('none');
+                setInvDiscountValue('0');
             }
             callbacks?.onAfterSuccess?.();
         } catch (err) {
@@ -277,30 +313,9 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
         }
     }
 
-    function pickNewFiles() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.multiple = true;
-        input.accept = 'image/*';
-        input.onchange = () => {
-            if (!input.files || !input.files.length) return;
-            const files = Array.from(input.files);
-            void (async () => {
-                const validFiles: File[] = [];
-                for (const file of files) {
-                    try {
-                        await ensureImageUnder1MB(file);
-                        validFiles.push(file);
-                    } catch (err: unknown) {
-                        setImageWarning(getErrorMessage(err, `Invalid image "${file.name}". Must be under 1 MB.`));
-                    }
-                }
-                if (validFiles.length) {
-                    setPickedFiles((prev) => [...prev, ...validFiles]);
-                }
-            })();
-        };
-        input.click();
+    /** Called by the form once each selected image has been cropped. */
+    function addCroppedFile(file: File) {
+        setPickedFiles((prev) => [...prev, file]);
     }
 
     function removeExistingImage(index: number) {
@@ -345,6 +360,13 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
     }, [coverSelection, existingImageUrls, pickedFilePreviews, previewImages]);
 
     return {
+        invEnabled, setInvEnabled,
+        invQuantity, setInvQuantity,
+        invPurchasePrice, setInvPurchasePrice,
+        invSalePrice, setInvSalePrice,
+        invUnit, setInvUnit,
+        invDiscountType, setInvDiscountType,
+        invDiscountValue, setInvDiscountValue,
         // state / values
         nameDraft, setNameDraft, slugDraft, setSlugDraft, autoSlug,
         categoryIdDraft, setCategoryIdDraft,
@@ -363,7 +385,7 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
         submitting, uploading,
         detailsMd, setDetailsMd,
         // actions
-        pickNewFiles,
+        addCroppedFile,
         removeExistingImage,
         removePickedFile,
         setImageAsCover,

@@ -9,7 +9,8 @@ import { Markdown } from '@/components/markdown';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { StorageService } from '@/lib/services/storageService';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { IMAGE_PRESETS } from '@/lib/constants/image-presets';
 import type { Variant } from '@/lib/services/variantService';
 import type { Product } from '@/lib/services/productService';
 import { useToast } from '@/components/ui/toast-provider';
@@ -46,6 +47,7 @@ export function VariantFormDialog({ open, onOpenChange, editing, products, onSav
     const [uploadingImg, setUploadingImg] = useState(false);
     const [removalRequested, setRemovalRequested] = useState(false);
     const [warningMsg, setWarningMsg] = useState<string | null>(null);
+    const cropper = useImageCropper(IMAGE_PRESETS.variant);
     const [detailsMd, setDetailsMd] = useState("");
     const [showMdPreview, setShowMdPreview] = useState(false);
 
@@ -209,21 +211,10 @@ export function VariantFormDialog({ open, onOpenChange, editing, products, onSav
                                         size="sm"
                                         variant="secondary"
                                         onClick={() => {
-                                            const input = document.createElement('input');
-                                            input.type = 'file';
-                                            input.accept = 'image/*';
-                                            input.onchange = () => {
-                                                if (input.files && input.files[0]) {
-                                                    const file = input.files[0];
-                                                    ensureImageUnder1MB(file)
-                                                        .then(() => {
-                                                            setPickedFile(file);
-                                                            setRemovalRequested(false);
-                                                        })
-                                                        .catch((err) => setWarningMsg(err?.message || 'Invalid image. Must be under 1 MB.'));
-                                                }
-                                            };
-                                            input.click();
+                                            cropper.pick(file => {
+                                                setPickedFile(file);
+                                                setRemovalRequested(false);
+                                            });
                                         }}
                                         disabled={uploadingImg}
                                         className="w-full sm:w-auto"
@@ -307,6 +298,7 @@ export function VariantFormDialog({ open, onOpenChange, editing, products, onSav
                         </Button>
                     </DialogFooter>
                 </div>
+                {cropper.cropperUi}
             </DialogContent>
         </Dialog>
     );

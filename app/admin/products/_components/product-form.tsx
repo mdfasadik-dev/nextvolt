@@ -17,6 +17,8 @@ import { ProductBadgePill } from "@/components/products/product-badge-pill";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { buildCategoryTreeItems } from "@/lib/utils/categoryTree";
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { IMAGE_PRESETS } from '@/lib/constants/image-presets';
 
 // values interface re-exported from hook
 
@@ -36,12 +38,20 @@ interface ProductFormProps {
 
 export function ProductForm({ categories, attributes, editing, isPending, onCreate, onUpdate, onEditCancel, mode = 'default', onValuesChange, onLogic, renderAfterDescription }: ProductFormProps) {
     const logic = useProductFormLogic(editing, categories, attributes);
+    const imageCropper = useImageCropper(IMAGE_PRESETS.product);
     const {
         nameDraft, setNameDraft, slugDraft, setSlugDraft, autoSlug,
         categoryIdDraft, setCategoryIdDraft,
         attributeValues, setAttributeValues, selectedAttrIds, setSelectedAttrIds,
         attrToAdd, setAttrToAdd,
         previewImages, coverImageUrl,
+        invEnabled, setInvEnabled,
+        invQuantity, setInvQuantity,
+        invPurchasePrice, setInvPurchasePrice,
+        invSalePrice, setInvSalePrice,
+        invUnit, setInvUnit,
+        invDiscountType, setInvDiscountType,
+        invDiscountValue, setInvDiscountValue,
         badgeEnabled, setBadgeEnabled,
         badgeLabel, setBadgeLabel,
         badgeColor, setBadgeColor,
@@ -49,7 +59,7 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
         badgeEndsAt, setBadgeEndsAt,
         badgeIsActive, setBadgeIsActive,
         submitting, uploading,
-        pickNewFiles, removeExistingImage, removePickedFile, setImageAsCover, handleSubmit,
+        addCroppedFile, removeExistingImage, removePickedFile, setImageAsCover, handleSubmit,
         imageWarning, setImageWarning,
         detailsMd, setDetailsMd,
     } = logic;
@@ -133,7 +143,7 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                                 No image selected
                             </div>
                         )}
-                        <Button type="button" size="sm" variant="secondary" onClick={pickNewFiles} disabled={uploading || submitting}>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => imageCropper.pickMany(addCroppedFile)} disabled={uploading || submitting}>
                             <ImagePlus className="w-3 h-3 mr-1" />Add Images
                         </Button>
                         {previewImages.length > 0 ? (
@@ -188,8 +198,77 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                         ) : null}
                     </div>
                     {uploading && <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Spinner className="w-3 h-3 animate-spin" />Uploading image…</p>}
-                    <p className="text-[10px] text-muted-foreground">Max size 1 MB per image. Cover image is the first image and used in listings.</p>
+                    <p className="text-[10px] text-muted-foreground">Images are cropped and compressed automatically. Cover image is the first image and used in listings.</p>
                 </div>
+                {!editing && (
+                    <div className="space-y-2 rounded-md border p-3">
+                        <div className="flex items-center justify-between">
+                            <label htmlFor="inv_enabled" className="text-xs font-medium">Opening stock &amp; pricing</label>
+                            <div className="flex items-center gap-2">
+                                <Checkbox id="inv_enabled" checked={invEnabled} onCheckedChange={(value) => setInvEnabled(!!value)} />
+                                <span className="text-[10px] text-muted-foreground">{invEnabled ? 'Included' : 'Skip'}</span>
+                            </div>
+                        </div>
+                        {invEnabled ? (
+                            <div className="space-y-2 pt-1">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted-foreground">Quantity</label>
+                                        <Input type="number" min={0} step={1} value={invQuantity} onChange={(e) => setInvQuantity(e.target.value)} className="h-8 text-xs" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted-foreground">Unit</label>
+                                        <Input value={invUnit} onChange={(e) => setInvUnit(e.target.value)} placeholder="pcs" className="h-8 text-xs" />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted-foreground">Purchase price</label>
+                                        <Input type="number" min={0} step="0.01" value={invPurchasePrice} onChange={(e) => setInvPurchasePrice(e.target.value)} className="h-8 text-xs" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted-foreground">Sale price</label>
+                                        <Input type="number" min={0} step="0.01" value={invSalePrice} onChange={(e) => setInvSalePrice(e.target.value)} className="h-8 text-xs" />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted-foreground">Discount type</label>
+                                        <select
+                                            value={invDiscountType}
+                                            onChange={(e) => setInvDiscountType(e.target.value as 'none' | 'percent' | 'amount')}
+                                            className="h-8 w-full rounded-md border bg-background px-2 text-xs"
+                                        >
+                                            <option value="none">None</option>
+                                            <option value="percent">Percent</option>
+                                            <option value="amount">Amount</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted-foreground">Discount value</label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            max={invDiscountType === 'percent' ? 100 : undefined}
+                                            step="0.01"
+                                            value={invDiscountValue}
+                                            onChange={(e) => setInvDiscountValue(e.target.value)}
+                                            disabled={invDiscountType === 'none'}
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">
+                                    Creates the first inventory row for this product. Manage stock later from the Inventory page.
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="text-[10px] text-muted-foreground">
+                                Skipped — you can add stock later from the Inventory page.
+                            </p>
+                        )}
+                    </div>
+                )}
                 <div className="space-y-2 rounded-md border p-3">
                     <div className="flex items-center justify-between">
                         <label htmlFor="badge_enabled" className="text-xs font-medium">Badge</label>
@@ -373,6 +452,7 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                 </Button>
                 {editing && <button type="button" className="text-xs underline text-muted-foreground" onClick={onEditCancel}>Cancel edit</button>}
             </form>
+            {imageCropper.cropperUi}
             <WarningDialog open={!!imageWarning} title="Image warning" description={imageWarning || undefined} onClose={() => setImageWarning(null)} />
         </>
     );

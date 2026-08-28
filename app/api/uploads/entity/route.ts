@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Only image uploads allowed' }, { status: 400 });
         }
         if (file.size > 1048576) {
-            return NextResponse.json({ error: 'Image must be 1 MB or smaller.' }, { status: 400 });
+            return NextResponse.json({ error: 'Image exceeds the 1 MB limit. Re-crop it in the image editor to compress it.' }, { status: 400 });
         }
         // Ratio is not restricted server-side.
         const supabase = await createAdminClient();

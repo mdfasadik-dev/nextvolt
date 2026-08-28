@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, ImagePlus, Trash2 } from 'lucide-react';
 import Image from 'next/image';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { IMAGE_PRESETS } from '@/lib/constants/image-presets';
 import { StorageService } from '@/lib/services/storageService';
 import type { Store } from '@/lib/services/storeService';
 import { useToast } from '@/components/ui/toast-provider';
@@ -66,20 +67,13 @@ export function StoreFormDialog({ open, onOpenChange, editing, onCreate, onUpdat
         }
     }, [editing]);
 
+    const cropper = useImageCropper(IMAGE_PRESETS.logo);
+
     function pickFile(kind: 'light' | 'dark') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = () => {
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-                ensureImageUnder1MB(file).then(() => {
-                    if (kind === 'light') { setPickedLight(file); setRemRemoveLight(false); }
-                    else { setPickedDark(file); setRemRemoveDark(false); }
-                }).catch(err => toast.push({ variant: 'error', title: 'Logo error', description: err?.message }));
-            }
-        };
-        input.click();
+        cropper.pick(file => {
+            if (kind === 'light') { setPickedLight(file); setRemRemoveLight(false); }
+            else { setPickedDark(file); setRemRemoveDark(false); }
+        });
     }
 
     async function handleSubmit(e: React.FormEvent) {
@@ -156,6 +150,7 @@ export function StoreFormDialog({ open, onOpenChange, editing, onCreate, onUpdat
                     <button onClick={() => onOpenChange(false)} className="text-xs rounded-md border px-3 py-1">Cancel</button>
                     <Button form="store-form" type="submit" disabled={isPending || uploading} className="text-xs">{(isPending || uploading) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}{editing ? ((isPending || uploading) ? 'Updating' : 'Update') : ((isPending || uploading) ? 'Creating' : 'Create')}</Button>
                 </DialogFooter>
+                {cropper.cropperUi}
             </DialogContent>
         </Dialog>
     );

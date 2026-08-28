@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import {
     ArrowLeft,
     Eye,
+    GripVertical,
     ImageIcon,
     Loader2,
     Monitor,
@@ -29,7 +30,10 @@ import { Markdown } from "@/components/markdown";
 import { useToast } from "@/components/ui/toast-provider";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { StorageService } from "@/lib/services/storageService";
+import { useImageCropper } from "@/lib/hooks/useImageCropper";
+import { IMAGE_PRESETS } from "@/lib/constants/image-presets";
 import { cn } from "@/lib/utils";
+import { moveItemWithPlacement } from "@/lib/utils/reorder";
 import type { ProjectWithSections } from "@/lib/services/projectService";
 import { createProject, updateProject, type ProjectInput } from "../actions";
 import { SectionInspector } from "./section-inspector";
@@ -37,6 +41,7 @@ import {
     buildRows,
     isSectionComplete,
     makeSection,
+    sectionImageSrc,
     type SectionDraft,
 } from "./builder-types";
 
@@ -104,10 +109,14 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
     const [panel, setPanel] = useState<"block" | "settings">(sections.length ? "block" : "settings");
     const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-    const [coverUploading, setCoverUploading] = useState(false);
+    const [dragKey, setDragKey] = useState<string | null>(null);
+    const [dropTarget, setDropTarget] = useState<{ key: string; placement: "before" | "after" } | null>(null);
+    const [coverFile, setCoverFile] = useState<File | null>(null);
+    const [coverPreview, setCoverPreview] = useState<string | null>(null);
+    const [uploadingCount, setUploadingCount] = useState(0);
+    const coverCropper = useImageCropper(IMAGE_PRESETS.projectCover);
     const [dirty, setDirty] = useState(false);
     const [editingTitle, setEditingTitle] = useState(false);
-    const coverRef = useRef<HTMLInputElement | null>(null);
     const titleInputRef = useRef<HTMLInputElement | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
     const headerRef = useRef<HTMLElement | null>(null);
@@ -115,6 +124,26 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
     const selectedIndex = sections.findIndex(section => section.key === selectedKey);
     const selected = selectedIndex >= 0 ? sections[selectedIndex] : null;
     const rows = useMemo(() => buildRows(sections), [sections]);
+    const dragProps = {
+        disabled: isPending,
+        dragKey,
+        dropTarget,
+        onDragStart: (key: string) => setDragKey(key),
+        onDragEnd: () => {
+            setDragKey(null);
+            setDropTarget(null);
+        },
+        onDragOver: (key: string, placement: "before" | "after") => setDropTarget({ key, placement }),
+        onDrop: (key: string) => {
+            const placement = dropTarget?.key === key ? dropTarget.placement : "before";
+            if (dragKey) reorderSections(dragKey, key, placement);
+            setDragKey(null);
+            setDropTarget(null);
+        },
+    };
+    // Local preview wins over the saved URL while an image is staged.
+    const coverSrc = coverPreview || meta.cover_image_url || null;
+    const pendingUploads = sections.filter(section => section.pendingFile).length + (coverFile ? 1 : 0);
     const incompleteCount = sections.filter(section => !isSectionComplete(section)).length;
 
     // Warn before losing unsaved edits.
@@ -139,6 +168,20 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
         const observer = new ResizeObserver(apply);
         observer.observe(header);
         return () => observer.disconnect();
+    }, []);
+
+    // Release staged object URLs when the editor unmounts.
+    const sectionsRef = useRef(sections);
+    sectionsRef.current = sections;
+    const coverPreviewRef = useRef(coverPreview);
+    coverPreviewRef.current = coverPreview;
+    useEffect(() => {
+        return () => {
+            if (coverPreviewRef.current) URL.revokeObjectURL(coverPreviewRef.current);
+            for (const section of sectionsRef.current) {
+                if (section.previewUrl) URL.revokeObjectURL(section.previewUrl);
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -167,6 +210,17 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
         setDirty(true);
     }
 
+    /** Drag-and-drop reorder, mirroring the admin lists elsewhere. */
+    function reorderSections(fromKey: string, toKey: string, placement: "before" | "after") {
+        if (fromKey === toKey) return;
+        const fromIndex = sections.findIndex(section => section.key === fromKey);
+        const toIndex = sections.findIndex(section => section.key === toKey);
+        const next = moveItemWithPlacement(sections, fromIndex, toIndex, placement);
+        if (next === sections) return;
+        setSections(next);
+        setDirty(true);
+    }
+
     function moveSection(index: number, direction: -1 | 1) {
         const target = index + direction;
         if (target < 0 || target >= sections.length) return;
@@ -188,18 +242,22 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
         setDirty(true);
     }
 
-    async function uploadCover(file: File) {
-        setCoverUploading(true);
-        try {
-            const { publicUrl } = await StorageService.uploadEntityImage("projects", file);
-            patchMeta({ cover_image_url: publicUrl });
-            toast.push({ variant: "success", title: "Cover uploaded" });
-        } catch (error) {
-            toast.push({ variant: "error", title: errorMessage(error, "Upload failed") });
-        } finally {
-            setCoverUploading(false);
-            if (coverRef.current) coverRef.current.value = "";
-        }
+    /**
+     * Stage the cropped cover locally; it is uploaded once, on save.
+     * Size/type are already guaranteed by the crop dialog.
+     */
+    function chooseCover(file: File) {
+        if (coverPreview) URL.revokeObjectURL(coverPreview);
+        setCoverFile(file);
+        setCoverPreview(URL.createObjectURL(file));
+        setDirty(true);
+    }
+
+    function clearCover() {
+        if (coverPreview) URL.revokeObjectURL(coverPreview);
+        setCoverFile(null);
+        setCoverPreview(null);
+        patchMeta({ cover_image_url: "" });
     }
 
     function save() {
@@ -210,11 +268,41 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
         }
         startTransition(async () => {
             try {
+                // Upload every staged image first, in parallel, then persist the
+                // resulting URLs in a single write.
+                const pending = sections.filter(section => section.pendingFile);
+                const totalUploads = pending.length + (coverFile ? 1 : 0);
+                setUploadingCount(totalUploads);
+
+                let coverUrl = meta.cover_image_url;
+                const uploadedByKey = new Map<string, string>();
+
+                if (totalUploads > 0) {
+                    const jobs: Promise<void>[] = [];
+                    if (coverFile) {
+                        jobs.push(
+                            StorageService.uploadEntityImage("projects", coverFile).then(({ publicUrl }) => {
+                                coverUrl = publicUrl;
+                            }),
+                        );
+                    }
+                    for (const section of pending) {
+                        jobs.push(
+                            StorageService.uploadEntityImage("projects", section.pendingFile as File).then(
+                                ({ publicUrl }) => {
+                                    uploadedByKey.set(section.key, publicUrl);
+                                },
+                            ),
+                        );
+                    }
+                    await Promise.all(jobs);
+                }
+
                 const payload: ProjectInput = {
                     title: meta.title.trim(),
                     slug: meta.slug.trim() || null,
                     summary: meta.summary.trim() || null,
-                    cover_image_url: meta.cover_image_url || null,
+                    cover_image_url: coverUrl || null,
                     client_name: meta.client_name.trim() || null,
                     location: meta.location.trim() || null,
                     completed_at: meta.completed_at || null,
@@ -227,7 +315,7 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                         layout: section.layout,
                         heading: section.heading,
                         content_md: section.content_md,
-                        image_url: section.image_url,
+                        image_url: uploadedByKey.get(section.key) ?? section.image_url,
                         image_alt: section.image_alt,
                         caption: section.caption,
                     })),
@@ -238,6 +326,12 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                     await createProject(payload);
                 }
                 setDirty(false);
+                if (coverPreview) URL.revokeObjectURL(coverPreview);
+                for (const section of pending) {
+                    if (section.previewUrl) URL.revokeObjectURL(section.previewUrl);
+                }
+                setCoverFile(null);
+                setCoverPreview(null);
                 toast.push({
                     variant: incompleteCount ? "warning" : "success",
                     title: project ? "Project saved" : "Project created",
@@ -249,6 +343,8 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                 router.refresh();
             } catch (error) {
                 toast.push({ variant: "error", title: errorMessage(error, "Could not save project") });
+            } finally {
+                setUploadingCount(0);
             }
         });
     }
@@ -347,7 +443,13 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                     ) : (
                         <Save className="mr-1.5 h-4 w-4" />
                     )}
-                    Save
+                    {uploadingCount > 0
+                        ? `Uploading ${uploadingCount} image${uploadingCount > 1 ? "s" : ""}…`
+                        : isPending
+                            ? "Saving…"
+                            : pendingUploads > 0
+                                ? `Save`
+                                : "Save"}
                 </Button>
             </header>
 
@@ -362,10 +464,11 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                     >
                         {/* Cover preview */}
                         <div className="border-b p-5">
-                            {meta.cover_image_url ? (
-                                <div className="relative aspect-[16/7] w-full overflow-hidden rounded-lg bg-muted">
+                            {coverSrc ? (
+                                <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-muted">
                                     <Image
-                                        src={meta.cover_image_url}
+                                        src={coverSrc}
+                                        unoptimized
                                         alt={meta.title || "Cover"}
                                         fill
                                         sizes="(max-width: 1024px) 100vw, 720px"
@@ -376,7 +479,7 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                                 <button
                                     type="button"
                                     onClick={() => setPanel("settings")}
-                                    className="flex aspect-[16/7] w-full items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground hover:bg-muted/40"
+                                    className="flex aspect-[16/9] w-full items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground hover:bg-muted/40"
                                 >
                                     Add a cover image in Settings
                                 </button>
@@ -427,6 +530,7 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                                                     setPanel("block");
                                                 }}
                                                 onDelete={() => setConfirmDelete(row.section.key)}
+                                                drag={dragProps}
                                             />
                                         ) : (
                                             <>
@@ -441,6 +545,7 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                                                     }}
                                                     onDelete={key => setConfirmDelete(key)}
                                                     onAdd={() => addSection("text", "left")}
+                                                    drag={dragProps}
                                                 />
                                                 <SlotOrPlaceholder
                                                     section={row.right}
@@ -453,6 +558,7 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                                                     }}
                                                     onDelete={key => setConfirmDelete(key)}
                                                     onAdd={() => addSection("text", "right")}
+                                                    drag={dragProps}
                                                 />
                                             </>
                                         )}
@@ -562,20 +668,11 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                                     <Label className="text-[11px] uppercase tracking-wide text-muted-foreground">
                                         Cover image
                                     </Label>
-                                    <input
-                                        ref={coverRef}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={event => {
-                                            const file = event.target.files?.[0];
-                                            if (file) void uploadCover(file);
-                                        }}
-                                    />
-                                    {meta.cover_image_url ? (
+                                    {coverSrc ? (
                                         <div className="relative aspect-[16/9] w-full overflow-hidden rounded-lg border bg-muted">
                                             <Image
-                                                src={meta.cover_image_url}
+                                                src={coverSrc}
+                                                unoptimized
                                                 alt="Cover"
                                                 fill
                                                 sizes="320px"
@@ -585,38 +682,38 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                                     ) : (
                                         <button
                                             type="button"
-                                            onClick={() => coverRef.current?.click()}
+                                            onClick={() => coverCropper.pick(chooseCover)}
                                             className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-xs text-muted-foreground hover:bg-muted/50"
                                         >
                                             <Upload className="h-5 w-5" />
-                                            Click to upload
+                                            Click to choose
                                         </button>
                                     )}
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <Button
                                             type="button"
                                             size="sm"
                                             variant="outline"
-                                            disabled={coverUploading}
-                                            onClick={() => coverRef.current?.click()}
+                                            onClick={() => coverCropper.pick(chooseCover)}
                                         >
-                                            {coverUploading ? (
-                                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <Upload className="mr-1 h-3.5 w-3.5" />
-                                            )}
-                                            {meta.cover_image_url ? "Replace" : "Upload"}
+                                            <Upload className="mr-1 h-3.5 w-3.5" />
+                                            {coverSrc ? "Replace" : "Choose image"}
                                         </Button>
-                                        {meta.cover_image_url && (
+                                        {coverSrc && (
                                             <Button
                                                 type="button"
                                                 size="sm"
                                                 variant="ghost"
                                                 className="text-destructive"
-                                                onClick={() => patchMeta({ cover_image_url: "" })}
+                                                onClick={clearCover}
                                             >
                                                 Remove
                                             </Button>
+                                        )}
+                                        {coverFile && (
+                                            <span className="text-[11px] text-muted-foreground">
+                                                Will upload on save
+                                            </span>
                                         )}
                                     </div>
                                 </div>
@@ -701,6 +798,8 @@ export function ProjectBuilder({ project }: { project: ProjectWithSections | nul
                 </aside>
             </div>
 
+            {coverCropper.cropperUi}
+
             <ConfirmDialog
                 open={Boolean(confirmDelete)}
                 title="Delete this block?"
@@ -722,6 +821,7 @@ function SlotOrPlaceholder({
     onSelect,
     onDelete,
     onAdd,
+    drag,
 }: {
     section: SectionDraft | null;
     index: number;
@@ -730,6 +830,7 @@ function SlotOrPlaceholder({
     onSelect: (key: string) => void;
     onDelete: (key: string) => void;
     onAdd: () => void;
+    drag: DragProps;
 }) {
     if (!section) {
         return (
@@ -750,9 +851,20 @@ function SlotOrPlaceholder({
             selected={section.key === selectedKey}
             onSelect={() => onSelect(section.key)}
             onDelete={() => onDelete(section.key)}
+            drag={drag}
         />
     );
 }
+
+type DragProps = {
+    disabled: boolean;
+    dragKey: string | null;
+    dropTarget: { key: string; placement: "before" | "after" } | null;
+    onDragStart: (key: string) => void;
+    onDragEnd: () => void;
+    onDragOver: (key: string, placement: "before" | "after") => void;
+    onDrop: (key: string) => void;
+};
 
 /** One block as it appears on the canvas: real content, click to select. */
 function CanvasBlock({
@@ -761,14 +873,19 @@ function CanvasBlock({
     selected,
     onSelect,
     onDelete,
+    drag,
 }: {
     section: SectionDraft;
     index: number;
     selected: boolean;
     onSelect: () => void;
     onDelete: () => void;
+    drag: DragProps;
 }) {
     const complete = isSectionComplete(section);
+    const reorderDisabled = drag.disabled;
+    const isDragging = drag.dragKey === section.key;
+    const target = drag.dropTarget?.key === section.key ? drag.dropTarget.placement : null;
     return (
         <div
             role="button"
@@ -780,13 +897,41 @@ function CanvasBlock({
                     onSelect();
                 }
             }}
+            draggable={!reorderDisabled}
+            onDragStart={() => drag.onDragStart(section.key)}
+            onDragEnd={drag.onDragEnd}
+            onDragOver={event => {
+                if (reorderDisabled || !drag.dragKey || drag.dragKey === section.key) return;
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                const placement = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                drag.onDragOver(section.key, placement);
+            }}
+            onDrop={event => {
+                event.preventDefault();
+                if (reorderDisabled || !drag.dragKey || drag.dragKey === section.key) return;
+                drag.onDrop(section.key);
+            }}
             className={cn(
                 "group relative cursor-pointer rounded-lg border p-4 transition-colors",
                 selected ? "border-primary ring-1 ring-primary" : "hover:border-primary/40",
                 !complete && "border-dashed bg-muted/20",
+                isDragging && "opacity-60",
+                target === "before" && "border-t-2 border-t-primary",
+                target === "after" && "border-b-2 border-b-primary",
             )}
         >
-            <div className="absolute right-2 top-2 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            {/* z-10 keeps the controls above the image's stacking context. */}
+            <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <span
+                    title="Drag to reorder"
+                    className={cn(
+                        "rounded bg-background/90 p-1 text-muted-foreground",
+                        reorderDisabled ? "cursor-not-allowed opacity-40" : "cursor-grab active:cursor-grabbing",
+                    )}
+                >
+                    <GripVertical className="h-3.5 w-3.5" />
+                </span>
                 <span className="rounded bg-background/90 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                     #{index + 1} {section.kind}
                 </span>
@@ -804,11 +949,12 @@ function CanvasBlock({
             </div>
 
             {section.kind === "image" ? (
-                section.image_url ? (
+                sectionImageSrc(section) ? (
                     <figure className="space-y-1.5">
                         <div className="relative aspect-[16/10] w-full overflow-hidden rounded-md bg-muted">
                             <Image
-                                src={section.image_url}
+                                src={sectionImageSrc(section) as string}
+                                unoptimized
                                 alt={section.image_alt || ""}
                                 fill
                                 sizes="(max-width: 768px) 100vw, 400px"
@@ -822,7 +968,7 @@ function CanvasBlock({
                 ) : (
                     <div className="flex min-h-[120px] flex-col items-center justify-center gap-1 text-xs text-muted-foreground">
                         <ImageIcon className="h-5 w-5" />
-                        Click to add an image
+                        Click to choose an image
                     </div>
                 )
             ) : section.content_md && section.content_md.trim() ? (

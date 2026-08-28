@@ -8,7 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import type { Category } from "@/lib/services/categoryService";
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { StorageService } from '@/lib/services/storageService';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { IMAGE_PRESETS } from '@/lib/constants/image-presets';
 import { WarningDialog } from "@/components/ui/warning-dialog";
 import { buildCategoryTreeItems, collectDescendantCategoryIds } from "@/lib/utils/categoryTree";
 
@@ -30,6 +31,7 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
     const [removalRequested, setRemovalRequested] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(existingImageUrl);
     const [warningMsg, setWarningMsg] = useState<string | null>(null);
+    const cropper = useImageCropper(IMAGE_PRESETS.category);
 
     useEffect(() => {
         setName(initial?.name ?? "");
@@ -137,17 +139,10 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
                         <div className="w-16 h-16 rounded border flex items-center justify-center text-[10px] text-muted-foreground">{removalRequested ? 'Removed' : 'No Image'}</div>
                     )}
                     <Button type="button" size="sm" variant="secondary" onClick={() => {
-                        const input = document.createElement('input');
-                        input.type = 'file'; input.accept = 'image/*';
-                        input.onchange = () => {
-                            if (input.files && input.files[0]) {
-                                const file = input.files[0];
-                                ensureImageUnder1MB(file)
-                                    .then(() => { setPickedFile(file); setRemovalRequested(false); })
-                                    .catch(err => setWarningMsg(err?.message || 'Invalid image. Must be under 1 MB.'));
-                            }
-                        };
-                        input.click();
+                        cropper.pick(file => {
+                            setPickedFile(file);
+                            setRemovalRequested(false);
+                        });
                     }} disabled={uploading}>
                         <ImagePlus className="w-3 h-3 mr-1" />{pickedFile ? 'Change' : (existingImageUrl ? 'Replace' : 'Select')}
                     </Button>
@@ -165,13 +160,14 @@ export function CategoryForm({ initial, onSubmit, submitting, parents }: Categor
                 </div>
                 {removalRequested && <p className="text-[10px] text-amber-600">Image will be removed on save.</p>}
                 {uploading && <p className="text-[10px] text-muted-foreground">Uploading...</p>}
-                <p className="text-[10px] text-muted-foreground">Max size 1 MB. For best results, use a square (1:1) image.</p>
+                <p className="text-[10px] text-muted-foreground">Images are cropped to a square and compressed automatically.</p>
             </div>
             <Button type="submit" disabled={submitting} className="w-full">
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {initial?.id ? (submitting ? "Updating" : "Update") : (submitting ? "Creating" : "Create")}
             </Button>
             <WarningDialog open={!!warningMsg} title="Image warning" description={warningMsg || undefined} onClose={() => setWarningMsg(null)} />
+            {cropper.cropperUi}
         </form>
     );
 }

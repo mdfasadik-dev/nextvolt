@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast-provider";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { PageLoadingOverlay } from "@/components/ui/page-loading-overlay";
+import { moveItemWithPlacement } from "@/lib/utils/reorder";
 
 interface Props { initial: Category[] }
 type CategoryFormValues = {
@@ -29,24 +30,6 @@ type CategoryMutationValues = CategoryFormValues & { attributeIds?: string[] };
 function getErrorMessage(error: unknown, fallback: string) {
     if (error instanceof Error && error.message) return error.message;
     return fallback;
-}
-
-function moveItemWithPlacement<T>(items: T[], fromIndex: number, toIndex: number, placement: "before" | "after"): T[] {
-    if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length || fromIndex === toIndex) {
-        return items;
-    }
-    const next = [...items];
-    const [moved] = next.splice(fromIndex, 1);
-    let insertIndex = toIndex;
-    if (fromIndex < toIndex) {
-        insertIndex = placement === "before" ? toIndex - 1 : toIndex;
-    } else {
-        insertIndex = placement === "before" ? toIndex : toIndex + 1;
-    }
-    if (insertIndex < 0) insertIndex = 0;
-    if (insertIndex > next.length) insertIndex = next.length;
-    next.splice(insertIndex, 0, moved);
-    return next;
 }
 
 export function CategoriesClient({ initial }: Props) {

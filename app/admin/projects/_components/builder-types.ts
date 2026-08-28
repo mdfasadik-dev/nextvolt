@@ -1,6 +1,16 @@
 import type { SectionInput } from "../actions";
 
-export type SectionDraft = SectionInput & { key: string };
+/**
+ * Editor-only draft. `pendingFile` holds an image the user picked but that has
+ * not been uploaded yet; `previewUrl` is its local object URL. Both are
+ * stripped before the draft is sent to the server — uploads happen once, on
+ * save, so abandoning the editor never leaves orphaned files in storage.
+ */
+export type SectionDraft = SectionInput & {
+    key: string;
+    pendingFile?: File | null;
+    previewUrl?: string | null;
+};
 
 export const LAYOUT_LABELS: Record<SectionInput["layout"], string> = {
     full: "Full width",
@@ -22,6 +32,8 @@ export function makeSection(kind: SectionInput["kind"], layout: SectionInput["la
         image_url: null,
         image_alt: null,
         caption: null,
+        pendingFile: null,
+        previewUrl: null,
     };
 }
 
@@ -29,7 +41,12 @@ export function makeSection(kind: SectionInput["kind"], layout: SectionInput["la
 export function isSectionComplete(section: SectionDraft) {
     return section.kind === "text"
         ? Boolean(section.content_md && section.content_md.trim())
-        : Boolean(section.image_url && section.image_url.trim());
+        : Boolean(section.pendingFile) || Boolean(section.image_url && section.image_url.trim());
+}
+
+/** What the canvas/inspector should display: local preview first, then saved URL. */
+export function sectionImageSrc(section: SectionDraft) {
+    return section.previewUrl || section.image_url || null;
 }
 
 /**

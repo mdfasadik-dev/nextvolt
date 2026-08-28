@@ -26,7 +26,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { PromotionWithItems } from '@/lib/data/promotions';
 import { getPromotionImageRatio } from '@/lib/promotions/image-ratio';
-import { ensureImageUnder1MB } from '@/lib/utils/imageValidation';
+import { useImageCropper } from '@/lib/hooks/useImageCropper';
+import { promotionPreset } from '@/lib/constants/image-presets';
 import { StorageService } from '@/lib/services/storageService';
 import { cn } from '@/lib/utils';
 import { PromotionImage } from '@/components/promotions/PromotionImage';
@@ -306,9 +307,11 @@ export function PromotionForm({ promotion }: PromotionFormProps) {
         setActiveItemIndex((prev) => Math.max(0, Math.min(prev, items.length - 2)));
     };
 
+    // Ratio follows the promotion type so the crop matches how it renders.
+    const cropper = useImageCropper(promotionPreset(type || null));
+
     const handleImagePick = async (file: File, index: number) => {
         try {
-            await ensureImageUnder1MB(file);
             const previewUrl = URL.createObjectURL(file);
 
             setPendingUploads((prev) => {
@@ -739,22 +742,18 @@ export function PromotionForm({ promotion }: PromotionFormProps) {
                                                     />
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <label className="cursor-pointer inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted/40">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            cropper.pick((file) => {
+                                                                void handleImagePick(file, activeItemIndex);
+                                                            })
+                                                        }
+                                                        className="cursor-pointer inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-muted/40"
+                                                    >
                                                         <ImagePlus className="h-4 w-4" />
                                                         Choose image
-                                                        <input
-                                                            type="file"
-                                                            className="hidden"
-                                                            accept="image/*"
-                                                            onChange={(e) => {
-                                                                const file = e.target.files?.[0];
-                                                                if (file) {
-                                                                    void handleImagePick(file, activeItemIndex);
-                                                                }
-                                                                e.currentTarget.value = '';
-                                                            }}
-                                                        />
-                                                    </label>
+                                                    </button>
                                                     {pendingUploads[activeItemIndex] ? (
                                                         <Button
                                                             type="button"
@@ -885,6 +884,7 @@ export function PromotionForm({ promotion }: PromotionFormProps) {
                     </Card>
                 </form>
             )}
+            {cropper.cropperUi}
         </div>
     );
 }
