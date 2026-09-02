@@ -1,4 +1,5 @@
 import { TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID } from "@/lib/env";
+import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 
 export type TelegramOrderItem = {
     name: string | null;
@@ -9,7 +10,8 @@ export type TelegramOrderItem = {
 
 export type TelegramOrderPayload = {
     orderId: string;
-    currency: string;
+    /** Optional: the store is single-currency, so this defaults to BDT. */
+    currency?: string;
     items: TelegramOrderItem[];
     subtotal: number;
     total: number;
@@ -31,6 +33,9 @@ function money(amount: number, currency: string): string {
 }
 
 export function buildOrderMessage(payload: TelegramOrderPayload): string {
+    // Always render BDT: an order row created before the currency fix could
+    // still carry a stale code, and showing it would be wrong either way.
+    const currency = DEFAULT_CURRENCY_CODE;
     const lines: string[] = [];
     lines.push("<b>🛒 New order</b>");
     lines.push(`<code>#${escapeHtml(payload.orderId)}</code>`);
@@ -42,14 +47,14 @@ export function buildOrderMessage(payload: TelegramOrderPayload): string {
     for (const item of payload.items) {
         const name = escapeHtml(item.name?.trim() || "Item");
         const variant = item.variant?.trim() ? ` (${escapeHtml(item.variant.trim())})` : "";
-        lines.push(`• ${name}${variant} × ${item.quantity} — ${money(item.lineTotal, payload.currency)}`);
+        lines.push(`• ${name}${variant} × ${item.quantity} — ${money(item.lineTotal, currency)}`);
     }
 
     lines.push("");
     if (payload.subtotal !== payload.total) {
-        lines.push(`Subtotal: ${money(payload.subtotal, payload.currency)}`);
+        lines.push(`Subtotal: ${money(payload.subtotal, currency)}`);
     }
-    lines.push(`<b>Total: ${money(payload.total, payload.currency)}</b>`);
+    lines.push(`<b>Total: ${money(payload.total, currency)}</b>`);
 
     return lines.join("\n");
 }

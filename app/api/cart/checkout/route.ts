@@ -91,9 +91,9 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "No valid cart items" }, { status: 400 });
         }
 
-        const currency = typeof body.currency === "string" && body.currency.trim().length
-            ? body.currency.trim().toUpperCase()
-            : DEFAULT_CURRENCY_CODE;
+        // Single-currency store: ignore whatever the client posts so a stale
+        // cached bundle can never persist the wrong currency on an order.
+        const currency = DEFAULT_CURRENCY_CODE;
 
         const supabase = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
 
