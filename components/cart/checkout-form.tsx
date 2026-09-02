@@ -14,6 +14,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { calculateCheckout, getCheckoutDeliveryOptionsForItems } from "@/app/(public)/checkout/actions";
 import { CalculatedTotals } from "@/lib/services/checkoutService";
 import { Separator } from "@/components/ui/separator";
+import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 
 function formatMoney(value: number, symbol: string) {
     return `${symbol}${value.toFixed(2)}`;
@@ -55,7 +56,7 @@ export function CheckoutForm() {
     const [isCalculating, startProcesing] = useTransition();
 
     const symbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
-    const currencyCode = process.env.NEXT_PUBLIC_CURRENCY_CODE || "USD";
+    const currencyCode = DEFAULT_CURRENCY_CODE;
 
     useEffect(() => {
         if (!cart.items.length) {

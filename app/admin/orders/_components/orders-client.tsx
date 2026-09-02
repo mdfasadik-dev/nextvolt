@@ -5,16 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { listOrders, updateOrderStatus, updateOrderNotes } from "../actions";
+import { listOrders, updateOrderStatus, updateOrderNotes, deleteOrders } from "../actions";
 import { ORDER_STATUS_OPTIONS } from "@/lib/constants/order-status";
 import type { OrderStatus } from "@/lib/constants/order-status";
 import type { OrderListResult, OrderSummary, OrderDetail } from "@/lib/services/orderService";
 import { useToast } from "@/components/ui/toast-provider";
 import { OrderStatusBadge } from "./order-status-badge";
 import { OrderDetailDialog } from "./order-detail-dialog";
-import { Eye, Search, Loader2 } from "lucide-react";
+import { Eye, Search, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { PaginationControls } from "@/app/admin/variants/_components/pagination-controls";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PageLoadingOverlay } from "@/components/ui/page-loading-overlay";
 
 type OrderTab = OrderStatus | "all";
 
@@ -49,7 +52,69 @@ export function OrdersClient({ initial }: OrdersClientProps) {
     const [isSavingNotes, setSavingNotes] = useState(false);
     const detailCache = useRef(new Map<string, OrderDetail>());
 
+    // Bulk selection. Kept as a Set of ids so it survives re-sorting, and is
+    // cleared whenever the visible result set changes.
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [isDeleting, setDeleting] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
+
     const currencyFallback = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
+
+    const visibleIds = useMemo(() => orders.map(order => order.id), [orders]);
+    const selectedVisible = useMemo(
+        () => visibleIds.filter(id => selectedIds.has(id)),
+        [visibleIds, selectedIds],
+    );
+    const allVisibleSelected = visibleIds.length > 0 && selectedVisible.length === visibleIds.length;
+    const someVisibleSelected = selectedVisible.length > 0 && !allVisibleSelected;
+
+    function toggleOne(id: string, checked: boolean) {
+        setSelectedIds(current => {
+            const next = new Set(current);
+            if (checked) next.add(id);
+            else next.delete(id);
+            return next;
+        });
+    }
+
+    function toggleAllVisible(checked: boolean) {
+        setSelectedIds(current => {
+            const next = new Set(current);
+            for (const id of visibleIds) {
+                if (checked) next.add(id);
+                else next.delete(id);
+            }
+            return next;
+        });
+    }
+
+    async function handleBulkDelete() {
+        const ids = Array.from(selectedIds);
+        if (!ids.length) return;
+        setDeleting(true);
+        try {
+            const result = await deleteOrders({ ids });
+            toastRef.current.push({
+                variant: "success",
+                title: `Deleted ${result.deleted.length} order${result.deleted.length === 1 ? "" : "s"}`,
+                description: result.restocked
+                    ? "Reserved stock was returned to inventory."
+                    : undefined,
+            });
+            setSelectedIds(new Set());
+            setConfirmOpen(false);
+            setRefreshKey(key => key + 1);
+        } catch (error) {
+            toastRef.current.push({
+                variant: "error",
+                title: "Delete failed",
+                description: error instanceof Error ? error.message : "Could not delete the selected orders.",
+            });
+        } finally {
+            setDeleting(false);
+        }
+    }
     const isFirstLoad = useRef(true);
     const previousSearchRef = useRef("");
 
@@ -63,7 +128,9 @@ export function OrdersClient({ initial }: OrdersClientProps) {
     }, [search]);
 
     useEffect(() => {
-        if (isFirstLoad.current) {
+        // refreshKey > 0 means an explicit reload (e.g. after deleting), which
+        // must run even on what would otherwise be the initial render.
+        if (isFirstLoad.current && refreshKey === 0) {
             isFirstLoad.current = false;
             previousSearchRef.current = debouncedSearch;
             return;
@@ -99,7 +166,7 @@ export function OrdersClient({ initial }: OrdersClientProps) {
                 });
             }
         });
-    }, [selectedStatus, debouncedSearch, page, pageSize]);
+    }, [selectedStatus, debouncedSearch, page, pageSize, refreshKey]);
 
     const formatDateTime = (iso: string) => {
         try {
@@ -283,11 +350,47 @@ export function OrdersClient({ initial }: OrdersClientProps) {
                     </div>
                 </CardHeader>
                 <CardContent>
+                    {selectedIds.size > 0 && (
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5">
+                            <p className="text-sm font-medium">
+                                {selectedIds.size} order{selectedIds.size === 1 ? "" : "s"} selected
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setSelectedIds(new Set())}
+                                    disabled={isDeleting}
+                                >
+                                    Clear
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => setConfirmOpen(true)}
+                                    disabled={isDeleting}
+                                >
+                                    <Trash2 className="mr-1.5 h-4 w-4" />
+                                    Delete selected
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                     <div className="overflow-hidden rounded-lg border">
                         <div className="max-h-[60vh] overflow-auto">
                             <table className="w-full min-w-[720px] text-sm">
                                 <thead>
                                     <tr className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                                        <th className="w-10 px-4 py-2">
+                                            <Checkbox
+                                                aria-label="Select all orders on this page"
+                                                checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                                                onCheckedChange={checked => toggleAllVisible(checked === true)}
+                                                disabled={visibleIds.length === 0}
+                                            />
+                                        </th>
                                         <th className="px-4 py-2 text-left font-semibold">Order</th>
                                         <th className="px-4 py-2 text-left font-semibold">Customer</th>
                                         <th className="px-4 py-2 text-left font-semibold">Placed</th>
@@ -301,13 +404,23 @@ export function OrdersClient({ initial }: OrdersClientProps) {
                                 <tbody>
                                     {orders.length === 0 && (
                                         <tr>
-                                            <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                                            <td colSpan={9} className="px-4 py-8 text-center text-sm text-muted-foreground">
                                                 No orders found for the selected filters.
                                             </td>
                                         </tr>
                                     )}
                                     {orders.map(order => (
-                                        <tr key={order.id} className="border-t">
+                                        <tr
+                                            key={order.id}
+                                            className={`border-t ${selectedIds.has(order.id) ? "bg-primary/5" : ""}`}
+                                        >
+                                            <td className="px-4 py-3">
+                                                <Checkbox
+                                                    aria-label={`Select order ${order.id}`}
+                                                    checked={selectedIds.has(order.id)}
+                                                    onCheckedChange={checked => toggleOne(order.id, checked === true)}
+                                                />
+                                            </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-col">
                                                     <span className="font-mono text-xs text-muted-foreground">#{order.id}</span>
@@ -386,6 +499,22 @@ export function OrdersClient({ initial }: OrdersClientProps) {
                 isStatusUpdating={isStatusUpdating}
                 isSavingNotes={isSavingNotes}
                 formatDateTime={formatDateTime}
+            />
+
+            <ConfirmDialog
+                open={confirmOpen}
+                title={`Delete ${selectedIds.size} order${selectedIds.size === 1 ? "" : "s"}?`}
+                description="This permanently removes the orders along with their items and charges. Any stock still reserved by them is returned to inventory. This cannot be undone."
+                confirmLabel="Delete"
+                variant="danger"
+                onConfirm={handleBulkDelete}
+                onCancel={() => setConfirmOpen(false)}
+            />
+
+            <PageLoadingOverlay
+                open={isDeleting}
+                title="Deleting orders..."
+                description="Please wait while the selected orders are removed."
             />
         </div >
     );

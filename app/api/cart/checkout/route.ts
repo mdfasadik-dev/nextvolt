@@ -3,6 +3,8 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { SUPABASE_SERVICE_ROLE_KEY } from "@/lib/env";
 import { OrderService, OrderChargeInsert } from "@/lib/services/orderService";
 import { CheckoutService } from "@/lib/services/checkoutService";
+import { TelegramService } from "@/lib/services/telegramService";
+import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 import type { Json } from "@/lib/types/supabase";
 
 export const runtime = "nodejs";
@@ -91,7 +93,7 @@ export async function POST(request: NextRequest) {
 
         const currency = typeof body.currency === "string" && body.currency.trim().length
             ? body.currency.trim().toUpperCase()
-            : "USD";
+            : DEFAULT_CURRENCY_CODE;
 
         const supabase = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
 
@@ -242,6 +244,24 @@ export async function POST(request: NextRequest) {
             await supabase.from("orders").delete().eq("id", order.id);
             return NextResponse.json({ error: itemsError.message }, { status: 500 });
         }
+
+        // Notify only once the order and its items are safely persisted.
+        // Deliberately awaited so serverless doesn't kill the request early,
+        // and it never throws, so a Telegram outage cannot fail a paid order.
+        await TelegramService.notifyNewOrder({
+            orderId: order.id,
+            currency,
+            items: orderItemsPayload.map(item => ({
+                name: item.product_name,
+                variant: item.variant_title,
+                quantity: item.quantity,
+                lineTotal: item.line_total,
+            })),
+            subtotal: totals.subtotal,
+            total: totals.total,
+            customerName: toNullableString(contactData?.fullName),
+            customerPhone: toNullableString(contactData?.phone),
+        });
 
         return NextResponse.json({ order, items: orderItemsPayload }, { status: 201 });
     } catch (error: unknown) {

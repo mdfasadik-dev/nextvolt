@@ -24,5 +24,13 @@ if (!serviceKey && isServer && process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
 
 export const SUPABASE_SERVICE_ROLE_KEY = serviceKey;
 
+/**
+ * Telegram order notifications. Server-only (no NEXT_PUBLIC_ prefix) — the bot
+ * token must never reach the browser. Both are optional: when either is unset,
+ * notifications are silently skipped and checkout is unaffected.
+ */
+export const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+export const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
 if (!SUPABASE_URL) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
 if (!SUPABASE_ANON_KEY) throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");

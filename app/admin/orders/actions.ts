@@ -127,5 +127,15 @@ export async function deleteOrder(payload: { id: string }) {
     await assertAuthenticated();
     const res = await OrderService.remove(payload.id);
     revalidatePath("/admin/orders");
+    revalidatePath("/admin");
+    return res;
+}
+
+/** Delete several orders at once; cascades to items and charges. */
+export async function deleteOrders(payload: { ids: string[] }) {
+    await assertAuthenticated();
+    const res = await OrderService.removeMany(payload.ids || []);
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin");
     return res;
 }

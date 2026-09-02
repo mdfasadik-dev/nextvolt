@@ -5,6 +5,7 @@ import { SUPABASE_SERVICE_ROLE_KEY } from "@/lib/env";
 import type { OrderStatus } from "@/lib/constants/order-status";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/types/supabase";
+import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 
 export type Order = Tables<"orders">;
 export type OrderCreate = TablesInsert<"orders">;
@@ -530,7 +531,7 @@ export class OrderService {
 
             // 1. Create Order
             const base: OrderCreate = {
-                currency: input.currency || "USD",
+                currency: input.currency || DEFAULT_CURRENCY_CODE,
                 subtotal_amount: input.subtotal_amount ?? 0,
                 total_amount: input.total_amount ?? 0, // Should be passed correctly calculated
                 status: (input.status as OrderStatus) || "pending",
@@ -639,11 +640,68 @@ export class OrderService {
     }
 
     static async remove(id: string): Promise<{ id: string } | null> {
+        const result = await this.removeMany([id]);
+        return result.deleted.includes(id) ? { id } : null;
+    }
+
+    /**
+     * Delete orders and everything referencing them.
+     *
+     * order_items and order_charges are removed by the database via
+     * ON DELETE CASCADE. Stock is the part the database cannot handle: an
+     * order in an inventory-holding status (accepted/shipped/completed) has
+     * already decremented stock, so that quantity is returned before the row
+     * disappears — otherwise deleting a shipped order would silently lose it.
+     */
+    static async removeMany(ids: string[]): Promise<{ deleted: string[]; restocked: number }> {
         return this.wrap(async () => {
+            const unique = Array.from(new Set(ids.filter(Boolean)));
+            if (!unique.length) return { deleted: [], restocked: 0 };
+
             const client = SUPABASE_SERVICE_ROLE_KEY ? await createAdminClient() : await createClient();
-            const { error } = await client.from("orders").delete().eq("id", id);
-            if (error) throw error;
-            return { id };
+
+            const { data: orders, error: loadError } = await client
+                .from("orders")
+                .select("id, status")
+                .in("id", unique);
+            if (loadError) throw loadError;
+            if (!orders?.length) return { deleted: [], restocked: 0 };
+
+            const holdingIds = orders
+                .filter(order => INVENTORY_STATUSES.has(order.status as OrderStatus))
+                .map(order => order.id);
+
+            let restocked = 0;
+            if (holdingIds.length) {
+                const { data: items, error: itemsError } = await client
+                    .from("order_items")
+                    .select("product_id, variant_id, quantity")
+                    .in("order_id", holdingIds);
+                if (itemsError) throw itemsError;
+                if (items?.length) {
+                    // direction 1 = give the stock back
+                    await OrderService.adjustInventoryForOrder(client, items, 1);
+                    restocked = items.length;
+                }
+            }
+
+            const targetIds = orders.map(order => order.id);
+            const { error: deleteError } = await client.from("orders").delete().in("id", targetIds);
+            if (deleteError) {
+                // Deletion failed after restocking, so undo the stock change.
+                if (holdingIds.length) {
+                    const { data: items } = await client
+                        .from("order_items")
+                        .select("product_id, variant_id, quantity")
+                        .in("order_id", holdingIds);
+                    if (items?.length) {
+                        await OrderService.adjustInventoryForOrder(client, items, -1);
+                    }
+                }
+                throw deleteError;
+            }
+
+            return { deleted: targetIds, restocked };
         });
     }
 

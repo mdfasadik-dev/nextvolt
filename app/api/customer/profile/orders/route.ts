@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { SUPABASE_SERVICE_ROLE_KEY } from "@/lib/env";
 import type { OrderStatus } from "@/lib/constants/order-status";
+import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 
 export const runtime = "nodejs";
 
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
             createdAt: row.created_at,
             status: row.status,
             totalAmount: row.total_amount,
-            currency: row.currency || "USD",
+            currency: row.currency || DEFAULT_CURRENCY_CODE,
             itemsCount: Array.isArray(row.order_items) ? row.order_items.length : 0,
         }));
 

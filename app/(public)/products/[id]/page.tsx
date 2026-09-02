@@ -6,6 +6,7 @@ import { createPublicClient } from "@/lib/supabase/server";
 import { absoluteUrl, buildPageMetadata, SEO_CONFIG } from "@/lib/seo";
 import type { Tables } from "@/lib/types/supabase";
 import { ProductBadgeService } from "@/lib/services/productBadgeService";
+import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 
 export const revalidate = 900;
 export const dynamicParams = true;
@@ -354,7 +355,7 @@ export default async function ProductDetailPage(props: ProductPageProps) {
             price.minPrice != null
                 ? {
                     "@type": "Offer",
-                    priceCurrency: process.env.NEXT_PUBLIC_CURRENCY_CODE || "USD",
+                    priceCurrency: DEFAULT_CURRENCY_CODE,
                     price: Number(price.minPrice.toFixed(2)),
                     availability:
                         (baseQty ?? 0) > 0
