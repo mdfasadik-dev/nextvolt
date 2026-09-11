@@ -271,7 +271,7 @@ export function MetaFieldsTab({ fields }: { fields: MetaFieldWithOptions[] }) {
             </CardContent>
 
             <Dialog open={Boolean(form)} onOpenChange={open => !open && setForm(null)}>
-                <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+                <DialogContent className="max-h-[85vh] w-full sm:max-w-2xl lg:max-w-3xl overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle>{form?.id ? "Edit Field" : "New Field"}</DialogTitle>
                         <DialogDescription>

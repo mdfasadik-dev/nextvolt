@@ -55,6 +55,12 @@ type ConditionRow = {
 
 type ProductRow = { product: ProductOption; is_primary: boolean };
 
+function shortenProductName(name: string, maxLen = 35): string {
+    if (!name) return "";
+    if (name.length <= maxLen) return name;
+    return name.slice(0, maxLen).trim() + "...";
+}
+
 type RuleForm = {
     id: string | null;
     name: string;
@@ -344,7 +350,7 @@ export function RulesTab({
             </CardContent>
 
             <Dialog open={Boolean(form)} onOpenChange={open => !open && setForm(null)}>
-                <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto overflow-x-hidden">
+                <DialogContent className="max-h-[85vh] w-full sm:max-w-3xl lg:max-w-4xl overflow-y-auto overflow-x-hidden">
                     <DialogHeader>
                         <DialogTitle>{form?.id ? "Edit Rule" : "New Rule"}</DialogTitle>
                         <DialogDescription>
@@ -639,8 +645,10 @@ export function RulesTab({
                                                 key={row.product.id}
                                                 className="flex items-center justify-between gap-2 rounded border bg-background px-2.5 py-2"
                                             >
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm">{row.product.name}</p>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium" title={row.product.name}>
+                                                        {shortenProductName(row.product.name, 40)}
+                                                    </p>
                                                     {row.product.brand && (
                                                         <p className="truncate text-[11px] text-muted-foreground">
                                                             {row.product.brand}

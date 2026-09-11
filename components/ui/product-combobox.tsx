@@ -94,8 +94,9 @@ export function ProductCombobox({
 
     const renderLabel = useMemo(() => {
         if (!value) return placeholder;
-        if (value.brand) return `${value.name} (${value.brand})`;
-        return value.name;
+        const name = value.name.length > 40 ? `${value.name.slice(0, 40).trim()}...` : value.name;
+        if (value.brand) return `${name} (${value.brand})`;
+        return name;
     }, [value, placeholder]);
 
     return (
@@ -166,7 +167,9 @@ export function ProductCombobox({
                                         }}
                                     >
                                         <div className="flex min-w-0 flex-1 flex-col">
-                                            <span className="truncate font-medium">{option.name}</span>
+                                            <span className="truncate font-medium" title={option.name}>
+                                                {option.name.length > 45 ? `${option.name.slice(0, 45).trim()}...` : option.name}
+                                            </span>
                                             {description && <span className="truncate text-xs text-muted-foreground">{description}</span>}
                                         </div>
                                         {isActive && <Check className="h-4 w-4 shrink-0" />}

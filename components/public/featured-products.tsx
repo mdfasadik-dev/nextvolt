@@ -1,6 +1,6 @@
 import { createPublicClient } from "@/lib/supabase/server";
 import type { Product } from "@/lib/services/productService";
-import { buildPriceMap } from "@/lib/services/pricing";
+import { buildPriceMap, sortProductsByStockAndOrder } from "@/lib/services/pricing";
 import { ProductCardsGrid } from "@/components/public/product-cards-grid";
 import { ProductBadgeService } from "@/lib/services/productBadgeService";
 
@@ -8,7 +8,6 @@ interface Props { limit?: number }
 
 export async function FeaturedProducts({ limit = 8 }: Props) {
     const supabase = createPublicClient();
-    const prefetchLimit = Math.max(limit * 3, limit);
 
     const { data: rawProducts, error } = await supabase
         .from("products")
@@ -17,8 +16,7 @@ export async function FeaturedProducts({ limit = 8 }: Props) {
         .eq("is_active", true)
         .eq("is_deleted", false)
         .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false })
-        .limit(prefetchLimit);
+        .order("created_at", { ascending: false });
     if (error) {
         return null;
     }
@@ -43,16 +41,18 @@ export async function FeaturedProducts({ limit = 8 }: Props) {
         activeCategorySet = new Set((activeCategories || []).map((category) => category.id));
     }
 
-    const products: Product[] = productsWithCategory
-        .filter((product) => !product.category_id || activeCategorySet.has(product.category_id))
-        .slice(0, limit);
+    const candidateProducts: Product[] = productsWithCategory
+        .filter((product) => !product.category_id || activeCategorySet.has(product.category_id));
 
-    if (!products.length) return null;
-    const productIds = products.map((p) => p.id);
+    if (!candidateProducts.length) return null;
+    const candidateProductIds = candidateProducts.map((p) => p.id);
     const [priceMap, badgeMap] = await Promise.all([
-        buildPriceMap(productIds),
-        ProductBadgeService.getVisibleBadgeMap(productIds),
+        buildPriceMap(candidateProductIds),
+        ProductBadgeService.getVisibleBadgeMap(candidateProductIds),
     ]);
+
+    const sortedProducts = sortProductsByStockAndOrder(candidateProducts, priceMap);
+    const products = sortedProducts.slice(0, limit);
     const symbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$';
     return (
         <section className="w-full flex flex-col gap-6" aria-labelledby="featured-heading">

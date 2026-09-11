@@ -39,3 +39,24 @@ export async function buildPriceMap(productIds: string[]): Promise<PriceMap> {
     }
     return map;
 }
+
+/**
+ * Sorts products so in-stock products come first (by sort_order),
+ * and out-of-stock products start after in-stock products (by sort_order).
+ */
+export function sortProductsByStockAndOrder<T extends { id: string; sort_order?: number | null }>(
+    products: T[],
+    priceMap: PriceMap
+): T[] {
+    return [...products].sort((a, b) => {
+        const qtyA = priceMap[a.id]?.totalQty ?? 0;
+        const qtyB = priceMap[b.id]?.totalQty ?? 0;
+        const inStockA = qtyA > 0 ? 1 : 0;
+        const inStockB = qtyB > 0 ? 1 : 0;
+
+        if (inStockA !== inStockB) {
+            return inStockB - inStockA; // 1 (in-stock) before 0 (out-of-stock)
+        }
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+    });
+}

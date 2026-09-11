@@ -11,7 +11,7 @@ import { Loader2, Package, Search } from "lucide-react";
 type ProductRow = Tables<"products">;
 
 type ProductResult = Pick<ProductRow, "id" | "name" | "slug" | "brand">;
-type ProductSearchQueryRow = Pick<ProductRow, "id" | "name" | "slug" | "brand" | "category_id">;
+type ProductSearchQueryRow = Pick<ProductRow, "id" | "name" | "slug" | "brand" | "category_id" | "sort_order">;
 
 interface ProductSearchBarProps {
     className?: string;
@@ -61,7 +61,7 @@ export function ProductSearchBar({
             setErrorMessage(null);
             const { data, error } = await supabase
                 .from("products")
-                .select("id,name,slug,brand,category_id")
+                .select("id,name,slug,brand,category_id,sort_order")
                 .eq("is_active", true)
                 .eq("is_deleted", false)
                 .or(`name.ilike.%${sanitizedTerm}%,slug.ilike.%${sanitizedTerm}%,brand.ilike.%${sanitizedTerm}%`)
@@ -99,8 +99,30 @@ export function ProductSearchBar({
                     activeCategorySet = new Set((activeCategories || []).map((category) => category.id));
                 }
 
-                const visibleResults: ProductResult[] = rows
-                    .filter((row) => !row.category_id || activeCategorySet.has(row.category_id))
+                const candidateRows = rows.filter((row) => !row.category_id || activeCategorySet.has(row.category_id));
+                const candidateIds = candidateRows.map((r) => r.id);
+
+                let qtyMap: Record<string, number> = {};
+                if (candidateIds.length > 0) {
+                    const { data: invData } = await supabase
+                        .from("inventory")
+                        .select("product_id, quantity")
+                        .in("product_id", candidateIds);
+                    if (invData) {
+                        for (const inv of invData) {
+                            qtyMap[inv.product_id] = (qtyMap[inv.product_id] || 0) + (inv.quantity || 0);
+                        }
+                    }
+                }
+
+                const sortedCandidates = [...candidateRows].sort((a, b) => {
+                    const inStockA = (qtyMap[a.id] || 0) > 0 ? 1 : 0;
+                    const inStockB = (qtyMap[b.id] || 0) > 0 ? 1 : 0;
+                    if (inStockA !== inStockB) return inStockB - inStockA;
+                    return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+                });
+
+                const visibleResults: ProductResult[] = sortedCandidates
                     .slice(0, maxResults)
                     .map(({ id, name, slug, brand }) => ({ id, name, slug, brand }));
 

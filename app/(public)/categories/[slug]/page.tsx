@@ -6,6 +6,7 @@ import { absoluteUrl, buildPageMetadata, SEO_CONFIG } from "@/lib/seo";
 import type { Tables } from "@/lib/types/supabase";
 import CategoryProductsClient from "./products-client";
 import { ProductBadgeService } from "@/lib/services/productBadgeService";
+import { sortProductsByStockAndOrder } from "@/lib/services/pricing";
 
 export const revalidate = 900;
 export const dynamicParams = true;
@@ -151,9 +152,11 @@ async function fetchData(slugOrId: string) {
         }
     }
 
+    const sortedProducts = sortProductsByStockAndOrder(productList, priceMap);
+
     return {
         category,
-        products: productList,
+        products: sortedProducts,
         badgeMap,
         priceMap,
         descendantCount: descendants.length,
