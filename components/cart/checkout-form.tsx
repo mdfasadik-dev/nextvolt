@@ -434,11 +434,10 @@ export function CheckoutForm() {
                                                     <RadioGroupItem value={opt.id} id={opt.id} className="peer sr-only" />
                                                     <Label
                                                         htmlFor={opt.id}
-                                                        className={`flex flex-col items-start text-left w-full gap-0 rounded-lg border-2 p-3.5 transition-all cursor-pointer ${
-                                                            isSelected
-                                                                ? "border-primary bg-popover shadow-sm ring-1 ring-primary/20"
-                                                                : "border-muted bg-popover/50 hover:bg-accent hover:text-accent-foreground"
-                                                        }`}
+                                                        className={`flex flex-col items-start text-left w-full gap-0 rounded-lg border-2 p-3.5 transition-all cursor-pointer ${isSelected
+                                                            ? "border-primary bg-popover shadow-sm ring-1 ring-primary/20"
+                                                            : "border-muted bg-popover/50 hover:bg-accent hover:text-accent-foreground"
+                                                            }`}
                                                     >
                                                         <div className="flex w-full items-center justify-between">
                                                             <div className="flex items-center gap-3 font-semibold text-sm">
@@ -487,11 +486,10 @@ export function CheckoutForm() {
                                                 <RadioGroupItem value={pm.id} id={`pm-${pm.id}`} className="peer sr-only" />
                                                 <Label
                                                     htmlFor={`pm-${pm.id}`}
-                                                    className={`flex flex-col items-start text-left w-full gap-0 rounded-lg border-2 p-3.5 transition-all cursor-pointer ${
-                                                        isSelected
-                                                            ? "border-primary bg-popover shadow-sm ring-1 ring-primary/20"
-                                                            : "border-muted bg-popover/50 hover:bg-accent hover:text-accent-foreground"
-                                                    }`}
+                                                    className={`flex flex-col items-start text-left w-full gap-0 rounded-lg border-2 p-3.5 transition-all cursor-pointer ${isSelected
+                                                        ? "border-primary bg-popover shadow-sm ring-1 ring-primary/20"
+                                                        : "border-muted bg-popover/50 hover:bg-accent hover:text-accent-foreground"
+                                                        }`}
                                                 >
                                                     <div className="flex items-center gap-3 font-semibold text-sm">
                                                         <div className={`h-4 w-4 rounded-full border flex items-center justify-center shrink-0 ${isSelected ? "border-primary text-primary" : "border-muted-foreground/40"}`}>
@@ -681,6 +679,21 @@ export function CheckoutForm() {
                         {selectedPm?.instructions ? (
                             <div className="rounded-lg border bg-muted/20 p-4">
                                 <Markdown content={selectedPm.instructions} />
+                            </div>
+                        ) : null}
+
+                        {((selectedPm?.instructions && selectedPm.instructions.trim().length > 0) ||
+                            (selectedPm?.button_label && selectedPm.button_label.trim() !== "Place Order")) ? (
+                            <div className="flex flex-col items-center justify-center p-4 border rounded-lg bg-background shadow-xs space-y-1">
+                                <Image
+                                    src="/bangla_qr.webp"
+                                    alt="Bangla QR Code"
+                                    width={220}
+                                    height={220}
+                                    className="rounded-md border object-contain max-h-[220px]"
+                                />
+                                <p className="text-xs text-muted-foreground font-medium text-center">Scan to pay with any Mobile Banking App</p>
+                                <p className="text-xs text-muted-foreground font-medium text-center text-orange-600">(Bangla QR)</p>
                             </div>
                         ) : null}
 
