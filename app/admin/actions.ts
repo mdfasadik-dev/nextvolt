@@ -152,3 +152,35 @@ export async function deleteCoupon(id: string) {
     revalidatePath("/admin/coupons");
 }
 
+import { PaymentMethodService, type PaymentMethodInsert, type PaymentMethodUpdate } from "@/lib/services/paymentMethodService";
+
+export async function getPaymentMethodsAdmin() {
+    return PaymentMethodService.listAdmin();
+}
+
+export async function createPaymentMethodAction(payload: PaymentMethodInsert, chargeOptionIds: string[]) {
+    const res = await PaymentMethodService.create(payload, chargeOptionIds);
+    revalidatePath("/admin/settings/payment");
+    revalidatePath("/checkout");
+    return res;
+}
+
+export async function updatePaymentMethodAction(id: string, payload: PaymentMethodUpdate, chargeOptionIds?: string[]) {
+    const res = await PaymentMethodService.update(id, payload, chargeOptionIds);
+    revalidatePath("/admin/settings/payment");
+    revalidatePath("/checkout");
+    return res;
+}
+
+export async function deletePaymentMethodAction(id: string) {
+    await PaymentMethodService.delete(id);
+    revalidatePath("/admin/settings/payment");
+    revalidatePath("/checkout");
+}
+
+export async function updatePaymentMethodOrderAction(items: { id: string; sort_order: number }[]) {
+    await PaymentMethodService.updateOrder(items);
+    revalidatePath("/admin/settings/payment");
+    revalidatePath("/checkout");
+}
+

@@ -18,7 +18,7 @@ type DeliveryPricingContext = {
 
 export type CalculatedTotals = {
     subtotal: number;
-    delivery: { id: string; label: string; amount: number } | null;
+    delivery: { id: string; label: string; amount: number; note?: string | null } | null;
     discount: { id: string; code: string; amount: number; type: string } | null;
     charges: { id: string; label: string; amount: number; type: 'tax' | 'fee' | 'charge' | 'discount'; raw_value?: number; calc_type?: 'percent' | 'amount' }[];
     total: number;
@@ -237,11 +237,20 @@ export class CheckoutService {
         return { totalWeightGrams, rulesByDeliveryId: grouped };
     }
 
-    private static resolveDeliveryAmount(option: DeliveryOptionRow, context: DeliveryPricingContext) {
+    private static resolveDeliveryOption(option: DeliveryOptionRow, context: DeliveryPricingContext) {
         const rules = context.rulesByDeliveryId.get(option.id) || [];
         const activeRule = rules.find((rule) => ruleApplies(context.totalWeightGrams, rule));
-        if (!activeRule) return Number(option.amount || 0);
-        return computeRuleCharge(context.totalWeightGrams, activeRule);
+        const amount = activeRule
+            ? computeRuleCharge(context.totalWeightGrams, activeRule)
+            : Number(option.amount || 0);
+
+        const note = (activeRule && activeRule.note && activeRule.note.trim())
+            ? activeRule.note.trim()
+            : (option.note && option.note.trim())
+            ? option.note.trim()
+            : null;
+
+        return { amount, note };
     }
 
     static async getDeliveryOptions(items?: Array<{ productId: string; quantity: number }>) {
@@ -256,15 +265,21 @@ export class CheckoutService {
         const normalizedItems = (items || []).filter((item) => item.productId && item.quantity > 0);
         const context = normalizedItems.length > 0 ? await this.buildDeliveryPricingContext(normalizedItems) : null;
 
-        return data.map(d => ({
-            id: d.id,
-            label: d.label,
-            amount: context ? this.resolveDeliveryAmount(d, context) : Number(d.amount),
-            base_amount: Number(d.amount),
-            is_default: d.is_default,
-            total_weight_grams: context?.totalWeightGrams ?? 0,
-            has_weight_rules: context ? (context.rulesByDeliveryId.get(d.id)?.length || 0) > 0 : false,
-        }));
+        return data.map(d => {
+            const resolved = context
+                ? this.resolveDeliveryOption(d, context)
+                : { amount: Number(d.amount), note: d.note?.trim() || null };
+            return {
+                id: d.id,
+                label: d.label,
+                amount: resolved.amount,
+                base_amount: Number(d.amount),
+                is_default: d.is_default,
+                note: resolved.note,
+                total_weight_grams: context?.totalWeightGrams ?? 0,
+                has_weight_rules: context ? (context.rulesByDeliveryId.get(d.id)?.length || 0) > 0 : false,
+            };
+        });
     }
 
     static async validateCoupon(code: string, subtotal: number) {
@@ -322,7 +337,8 @@ export class CheckoutService {
     static async calculateOrderTotals(
         items: { productId: string; variantId?: string; price: number; quantity: number }[],
         deliveryId?: string,
-        couponCode?: string
+        couponCode?: string,
+        paymentMethodId?: string
     ): Promise<CalculatedTotals> {
         const productMap = await this.assertProductsAreCheckoutAvailable(items);
         await this.assertItemsInStock(items, productMap);
@@ -359,38 +375,50 @@ export class CheckoutService {
                     productId: item.productId,
                     quantity: item.quantity,
                 })));
-                const amount = this.resolveDeliveryAmount(delOption, context);
+                const resolved = this.resolveDeliveryOption(delOption, context);
                 delivery = {
                     id: delOption.id,
                     label: delOption.label,
-                    amount,
+                    amount: resolved.amount,
+                    note: resolved.note,
                 };
                 currentTotal += delivery.amount;
             }
         }
 
-        // 4. Apply Charge Options (Taxes/Fees)
-        // These are typically applied to subtotal (pre-discount? or post-discount?).
-        // Usually taxes are on the discounted amount.
-        const { data: chargeOptions } = await supabase
-            .from('charge_options')
-            .select('*')
-            .eq('is_active', true)
-            .order('sort_order', { ascending: true });
+        // 4. Apply Charge Options linked to Payment Method (or fallback to general active charges)
+        let chargeOptions: Tables<"charge_options">[] = [];
+        if (paymentMethodId) {
+            const { data: pmCharges } = await supabase
+                .from("payment_method_charges")
+                .select("charge_options(*)")
+                .eq("payment_method_id", paymentMethodId);
+
+            if (pmCharges) {
+                chargeOptions = pmCharges
+                    .map((pmc: any) => pmc.charge_options)
+                    .filter((co: any) => co && co.is_active)
+                    .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+            }
+        } else {
+            const { data: generalCharges } = await supabase
+                .from("charge_options")
+                .select("*")
+                .eq("is_active", true)
+                .order("sort_order", { ascending: true });
+            chargeOptions = generalCharges || [];
+        }
 
         const charges = [];
-        if (chargeOptions) {
+        if (chargeOptions.length > 0) {
             for (const opt of chargeOptions) {
                 let amount = 0;
                 if (opt.calc_type === 'percent') {
-                    // For percent, calculate based on subtotal (or taxable base if needed)
-                    // Usually fees are on subtotal
                     amount = (subtotal * opt.amount) / 100;
                 } else {
                     amount = opt.amount;
                 }
 
-                // If type is discount, subtract it. If charge/tax, add it.
                 if (opt.type === 'discount') {
                     currentTotal -= amount;
                 } else {
@@ -401,7 +429,7 @@ export class CheckoutService {
                     id: opt.id,
                     label: opt.label,
                     amount: amount,
-                    type: opt.type as 'tax' | 'fee' | 'charge' | 'discount', // Extend type if needed, or map to 'fee'/'tax'
+                    type: opt.type as 'tax' | 'fee' | 'charge' | 'discount',
                     calc_type: opt.calc_type as 'percent' | 'amount',
                     raw_value: opt.amount
                 });

@@ -786,6 +786,7 @@ export type Database = {
           is_default: boolean
           label: string
           metadata: Json | null
+          note: string | null
           sort_order: number
           updated_at: string
         }
@@ -797,6 +798,7 @@ export type Database = {
           is_default?: boolean
           label: string
           metadata?: Json | null
+          note?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -808,6 +810,7 @@ export type Database = {
           is_default?: boolean
           label?: string
           metadata?: Json | null
+          note?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -828,6 +831,7 @@ export type Database = {
           max_weight_grams: number | null
           metadata: Json | null
           min_weight_grams: number
+          note: string | null
           sort_order: number
           updated_at: string
         }
@@ -845,6 +849,7 @@ export type Database = {
           max_weight_grams?: number | null
           metadata?: Json | null
           min_weight_grams?: number
+          note?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -862,6 +867,7 @@ export type Database = {
           max_weight_grams?: number | null
           metadata?: Json | null
           min_weight_grams?: number
+          note?: string | null
           sort_order?: number
           updated_at?: string
         }
@@ -871,6 +877,93 @@ export type Database = {
             columns: ["delivery_id"]
             isOneToOne: false
             referencedRelation: "delivery"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_methods: {
+        Row: {
+          button_label: string | null
+          created_at: string
+          custom_fields: Json | null
+          id: string
+          instructions: string | null
+          is_active: boolean
+          is_default: boolean
+          key: string
+          label: string
+          metadata: Json | null
+          note: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          button_label?: string | null
+          created_at?: string
+          custom_fields?: Json | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          is_default?: boolean
+          key: string
+          label: string
+          metadata?: Json | null
+          note?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          button_label?: string | null
+          created_at?: string
+          custom_fields?: Json | null
+          id?: string
+          instructions?: string | null
+          is_active?: boolean
+          is_default?: boolean
+          key?: string
+          label?: string
+          metadata?: Json | null
+          note?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_method_charges: {
+        Row: {
+          charge_option_id: string
+          created_at: string
+          id: string
+          payment_method_id: string
+          sort_order: number
+        }
+        Insert: {
+          charge_option_id: string
+          created_at?: string
+          id?: string
+          payment_method_id: string
+          sort_order?: number
+        }
+        Update: {
+          charge_option_id?: string
+          created_at?: string
+          id?: string
+          payment_method_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_method_charges_payment_method_id_fkey"
+            columns: ["payment_method_id"]
+            isOneToOne: false
+            referencedRelation: "payment_methods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_method_charges_charge_option_id_fkey"
+            columns: ["charge_option_id"]
+            isOneToOne: false
+            referencedRelation: "charge_options"
             referencedColumns: ["id"]
           },
         ]
@@ -1193,6 +1286,47 @@ export type Database = {
             foreignKeyName: "product_badges_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: true
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_datasheets: {
+        Row: {
+          created_at: string
+          file_size: number | null
+          file_type: string
+          file_url: string
+          id: string
+          name: string
+          product_id: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          file_size?: number | null
+          file_type: string
+          file_url: string
+          id?: string
+          name: string
+          product_id: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          file_size?: number | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          name?: string
+          product_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_datasheets_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
             referencedRelation: "products"
             referencedColumns: ["id"]
           },

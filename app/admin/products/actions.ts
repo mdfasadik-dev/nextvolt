@@ -3,6 +3,7 @@ import { ProductService } from "@/lib/services/productService";
 import { CategoryService } from "@/lib/services/categoryService";
 import { ProductAttributeValueService } from "@/lib/services/productAttributeValueService";
 import { ProductImageService } from "@/lib/services/productImageService";
+import { ProductDatasheetService, type ProductDatasheetInput } from "@/lib/services/productDatasheetService";
 import { ProductBadgeService, type ProductBadgeInput } from "@/lib/services/productBadgeService";
 import { InventoryService } from "@/lib/services/inventoryService";
 import { revalidatePath } from "next/cache";
@@ -70,6 +71,7 @@ type ProductPayload = {
     main_image_url?: string | null;
     image_urls?: string[];
     badge?: ProductBadgeInput | null;
+    datasheets?: ProductDatasheetInput[];
     attributeValues?: { attribute_id: string; value: string | number | boolean | null }[];
     /**
      * Optional opening stock, created in the same step so the admin does not
@@ -118,6 +120,11 @@ export async function listProductBadgeMap(productIds: string[]) {
     return ProductBadgeService.getAdminBadgeMap(productIds);
 }
 
+export async function listProductDatasheets(productId: string) {
+    noStore();
+    return ProductDatasheetService.listByProduct(productId);
+}
+
 export async function createProduct(payload: ProductPayload) {
     const supabase = await createClient(); const { data: { user } } = await supabase.auth.getUser(); if (!user) throw new Error("Unauthorized");
     const sortOrder = Number.isFinite(payload.sort_order)
@@ -126,6 +133,7 @@ export async function createProduct(payload: ProductPayload) {
     const rec = await ProductService.create({ name: payload.name, slug: payload.slug || null, category_id: payload.category_id, brand: payload.brand || null, weight_grams: payload.weight_grams ?? 0, sort_order: sortOrder, is_active: payload.is_active ?? true, is_featured: payload.is_featured ?? false, description: payload.description || null, details_md: payload.details_md || null, main_image_url: payload.main_image_url || null });
     if (rec) await ProductImageService.syncProductImages(rec.id, payload.image_urls || (payload.main_image_url ? [payload.main_image_url] : []));
     if (rec) await ProductBadgeService.syncProductBadge(rec.id, payload.badge || null);
+    if (rec && payload.datasheets) await ProductDatasheetService.syncDatasheets(rec.id, payload.datasheets);
     if (rec && payload.attributeValues?.length) await ProductAttributeValueService.upsertValues(rec.id, payload.attributeValues);
     if (rec && payload.inventory) {
         await InventoryService.create({ product_id: rec.id, variant_id: null, ...normalizeInventory(payload.inventory) });
@@ -155,6 +163,7 @@ export async function updateProduct(payload: ProductPayload & { id: string }) {
     const rec = await ProductService.update(payload.id, updatePayload);
     if (rec) await ProductImageService.syncProductImages(rec.id, payload.image_urls || (payload.main_image_url ? [payload.main_image_url] : []));
     if (rec) await ProductBadgeService.syncProductBadge(rec.id, payload.badge || null);
+    if (rec && payload.datasheets) await ProductDatasheetService.syncDatasheets(rec.id, payload.datasheets);
     if (rec && payload.attributeValues) await ProductAttributeValueService.upsertValues(rec.id, payload.attributeValues);
     revalidatePath("/admin/products");
     revalidatePath("/");
@@ -164,6 +173,7 @@ export async function deleteProduct(payload: { id: string }) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Unauthorized");
+    await ProductDatasheetService.deleteAllByProduct(payload.id);
     const res = await ProductService.remove(payload.id);
     revalidatePath("/admin/products");
     revalidatePath("/");

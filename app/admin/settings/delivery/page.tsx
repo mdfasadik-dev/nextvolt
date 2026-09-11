@@ -61,6 +61,7 @@ type DeliveryRule = {
     increment_rounding: RoundingMode;
     is_active: boolean;
     sort_order: number;
+    note: string;
 };
 
 type DeliveryOption = {
@@ -70,6 +71,7 @@ type DeliveryOption = {
     is_active: boolean;
     is_default: boolean;
     sort_order: number;
+    note: string;
     rules: DeliveryRule[];
 };
 
@@ -79,6 +81,7 @@ type DeliveryOptionPayload = {
     sort_order: number;
     is_active: boolean;
     is_default: boolean;
+    note: string | null;
     metadata: null;
 };
 
@@ -96,6 +99,7 @@ function createEmptyRule(nextSort: number): DeliveryRule {
         increment_rounding: "ceil",
         is_active: true,
         sort_order: nextSort,
+        note: "",
     };
 }
 
@@ -117,6 +121,7 @@ function toRuleDraft(raw: Record<string, unknown>, index: number): DeliveryRule 
         increment_rounding: raw.increment_rounding === "floor" || raw.increment_rounding === "round" ? raw.increment_rounding : "ceil",
         is_active: typeof raw.is_active === "boolean" ? raw.is_active : true,
         sort_order: typeof raw.sort_order === "number" ? raw.sort_order : index,
+        note: typeof raw.note === "string" ? raw.note : "",
     };
 }
 
@@ -130,6 +135,7 @@ function toOption(raw: Record<string, unknown>): DeliveryOption | null {
         is_active: typeof raw.is_active === "boolean" ? raw.is_active : true,
         is_default: typeof raw.is_default === "boolean" ? raw.is_default : false,
         sort_order: typeof raw.sort_order === "number" ? raw.sort_order : 0,
+        note: typeof raw.note === "string" ? raw.note : "",
         rules: rulesRaw
             .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
             .map((rule, index) => toRuleDraft(rule, index)),
@@ -186,6 +192,7 @@ export default function DeliverySettingsPage() {
 
     const [label, setLabel] = useState("");
     const [amount, setAmount] = useState("0");
+    const [note, setNote] = useState("");
     const [active, setActive] = useState(true);
     const [isDefault, setIsDefault] = useState(false);
     const [rules, setRules] = useState<DeliveryRule[]>([]);
@@ -224,6 +231,7 @@ export default function DeliverySettingsPage() {
         setCurrentOption(option);
         setLabel(option?.label || "");
         setAmount(String(option?.amount ?? 0));
+        setNote(option?.note || "");
         setActive(option?.is_active ?? true);
         setIsDefault(option?.is_default ?? false);
         setRules(option ? sortRules(option.rules) : []);
@@ -309,6 +317,7 @@ export default function DeliverySettingsPage() {
             sort_order: currentOption ? currentOption.sort_order : options.length,
             is_active: active,
             is_default: isDefault,
+            note: note.trim() || null,
             metadata: null,
         };
 
@@ -324,6 +333,7 @@ export default function DeliverySettingsPage() {
             increment_rounding: rule.increment_rounding,
             sort_order: index,
             is_active: rule.is_active,
+            note: rule.note.trim() || null,
             metadata: null,
         }));
 
@@ -442,6 +452,11 @@ export default function DeliverySettingsPage() {
                                 </div>
                             </div>
 
+                            <div className="grid gap-2">
+                                <Label htmlFor="note">Customer Note (Optional)</Label>
+                                <Input id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Courier charge is needed to pay in advance." />
+                            </div>
+
                             <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
                                 <div className="flex items-center justify-between">
                                     <Label htmlFor="is_active" className="cursor-pointer">Active</Label>
@@ -508,7 +523,7 @@ export default function DeliverySettingsPage() {
                                                         <Input type="number" min="0" step="0.01" value={rule.incremental_charge} onChange={(e) => setRuleField(index, { incremental_charge: e.target.value })} />
                                                     </div>
                                                 </div>
-                                                <div className="grid gap-3 md:grid-cols-2">
+                                                <div className="grid gap-3 md:grid-cols-3">
                                                     <div className="grid gap-1">
                                                         <Label className="text-xs">Rounding</Label>
                                                         <Select value={rule.increment_rounding} onValueChange={(value) => setRuleField(index, { increment_rounding: value as RoundingMode })}>
@@ -519,6 +534,10 @@ export default function DeliverySettingsPage() {
                                                                 <SelectItem value="floor">Floor (round down)</SelectItem>
                                                             </SelectContent>
                                                         </Select>
+                                                    </div>
+                                                    <div className="grid gap-1">
+                                                        <Label className="text-xs">Rule Customer Note (Optional)</Label>
+                                                        <Input value={rule.note} onChange={(e) => setRuleField(index, { note: e.target.value })} placeholder="e.g. Heavy item shipping note" />
                                                     </div>
                                                     <div className="flex items-end">
                                                         <div className="flex items-center justify-between w-full rounded-md border p-2">

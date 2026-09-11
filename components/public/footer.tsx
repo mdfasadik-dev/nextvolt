@@ -1,7 +1,8 @@
 import { StoreService } from '@/lib/services/storeService';
 import Link from "next/link";
 import { ContentPageService } from "@/lib/services/contentPageService";
-import { Mail, LocateFixed, Phone, Facebook, MessageCircle } from "lucide-react";
+import { Mail, LocateFixed, Phone, Facebook } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 
 type OpeningHoursSlot = { open?: string; close?: string };
 type OpeningHoursMap = Record<string, OpeningHoursSlot[]>;
@@ -122,7 +123,7 @@ export async function Footer() {
                                             className="inline-flex items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600/15 px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-600 hover:text-white dark:text-emerald-400"
                                             aria-label={`Chat with support on WhatsApp at ${store.contact_phone}`}
                                         >
-                                            <MessageCircle className="h-4 w-4" />
+                                            <WhatsAppIcon className="h-4 w-4" />
                                             <span>WhatsApp Support</span>
                                         </a>
                                     ) : (

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { Package, User, MapPin, Tag, ChevronLeft, Loader2, Printer } from "lucide-react";
+import { Package, User, MapPin, Tag, ChevronLeft, Loader2, Printer, CreditCard, Truck } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
@@ -252,6 +253,23 @@ export function OrderDetailsClient({ order }: { order: OrderDetail }) {
             }
         `;
 
+        const paymentMethodLabel = order.paymentMethodInfo?.label || "Cash on delivery";
+        const deliveryMethodLabel = order.deliveryMethodInfo?.label || deliveryCharge?.label || null;
+
+        const customFieldsHtml = order.paymentMethodInfo?.customFieldsData && order.paymentMethodInfo.customFieldsData.length > 0
+            ? `
+                <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #e2e8f0;">
+                    <div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #64748b; margin-bottom: 4px;">Submitted Payment Information:</div>
+                    ${order.paymentMethodInfo.customFieldsData.map(f => `
+                        <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px;">
+                            <span style="color: #64748b;">${escapeHtml(f.label)}:</span>
+                            <span style="font-weight: 600; font-family: monospace;">${escapeHtml(f.value)}</span>
+                        </div>
+                    `).join("")}
+                </div>
+              `
+            : "";
+
         const html = `
             <div class="sheet">
                 <header class="header">
@@ -278,9 +296,16 @@ export function OrderDetailsClient({ order }: { order: OrderDetail }) {
                             <div class="muted">${escapeHtml(order.shippingContact.phone || "N/A")}</div>
                         </div>
                         <div class="panel">
-                            <h3>Shipping Address</h3>
+                            <h3>Shipping & Delivery</h3>
+                            ${deliveryMethodLabel ? `<div style="margin-bottom: 4px;"><strong>Delivery Method:</strong> ${escapeHtml(deliveryMethodLabel)}</div>` : ""}
                             <div class="muted">${formatAddressHtml(order.shippingContact.addressLines)}</div>
                         </div>
+                    </section>
+
+                    <section class="panel" style="margin-bottom: 22px;">
+                        <h3>Payment Information</h3>
+                        <div><strong>Payment Method:</strong> ${escapeHtml(paymentMethodLabel)}</div>
+                        ${customFieldsHtml}
                     </section>
 
                     <section>
@@ -429,19 +454,49 @@ export function OrderDetailsClient({ order }: { order: OrderDetail }) {
                         </CardContent>
                     </Card>
 
-                    {/* Financial Summary */}
+                    {/* Financial & Payment Summary */}
                     <Card>
                         <CardHeader>
-                            <CardTitle>Payment Details</CardTitle>
+                            <CardTitle className="flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <CreditCard className="h-5 w-5" /> Payment & Method Details
+                                </span>
+                                {order.paymentMethodInfo?.label && (
+                                    <Badge variant="outline" className="font-semibold text-xs bg-primary/5 text-primary border-primary/20">
+                                        {order.paymentMethodInfo.label}
+                                    </Badge>
+                                )}
+                            </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            <div className="flex justify-between items-center text-muted-foreground">
+                            <div className="flex justify-between items-center text-sm pb-2 border-b">
+                                <span className="text-muted-foreground font-medium">Payment Method:</span>
+                                <span className="font-semibold text-foreground">{order.paymentMethodInfo?.label || "Cash on delivery"}</span>
+                            </div>
+
+                            {order.paymentMethodInfo?.customFieldsData && order.paymentMethodInfo.customFieldsData.length > 0 && (
+                                <div className="rounded-lg border bg-muted/30 p-3.5 space-y-2">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
+                                        Submitted Payment Information
+                                    </span>
+                                    <div className="grid gap-2">
+                                        {order.paymentMethodInfo.customFieldsData.map((field) => (
+                                            <div key={field.id} className="flex justify-between items-center text-sm border-b border-muted/50 pb-1.5 last:border-0 last:pb-0">
+                                                <span className="text-muted-foreground font-medium">{field.label}:</span>
+                                                <span className="font-mono font-semibold text-foreground bg-background px-2 py-0.5 rounded border text-xs">{field.value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex justify-between items-center text-muted-foreground text-sm">
                                 <span>Subtotal</span>
                                 <span className="text-foreground font-medium">{formatCurrency(order.subtotalAmount)}</span>
                             </div>
 
                             {deliveryCharge && (
-                                <div className="flex justify-between items-center text-muted-foreground">
+                                <div className="flex justify-between items-center text-muted-foreground text-sm">
                                     <div className="flex items-center gap-2">
                                         <Package className="h-4 w-4" />
                                         <span>Delivery {deliveryCharge.label ? `(${deliveryCharge.label})` : ''}</span>
@@ -451,7 +506,7 @@ export function OrderDetailsClient({ order }: { order: OrderDetail }) {
                             )}
 
                             {extraCharges.map((c) => (
-                                <div key={c.id} className="flex justify-between items-center text-muted-foreground">
+                                <div key={c.id} className="flex justify-between items-center text-muted-foreground text-sm">
                                     <span>{c.label || "Extra Charge"}
                                         {c.calcType === 'percent' ? ` (${c.baseAmount}%)` : ''}
                                     </span>
@@ -460,7 +515,7 @@ export function OrderDetailsClient({ order }: { order: OrderDetail }) {
                             ))}
 
                             {discountCharge && (
-                                <div className="flex justify-between items-center text-green-600">
+                                <div className="flex justify-between items-center text-green-600 text-sm">
                                     <div className="flex items-center gap-2">
                                         <Tag className="h-4 w-4" />
                                         <span>Discount {discountCharge.label ? `(${discountCharge.label})` : ''}</span>
@@ -508,23 +563,41 @@ export function OrderDetailsClient({ order }: { order: OrderDetail }) {
                         </CardContent>
                     </Card>
 
-                    {/* Shipping Info */}
+                    {/* Shipping & Delivery Info */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <MapPin className="h-5 w-5" /> Shipping
+                            <CardTitle className="flex items-center justify-between">
+                                <span className="flex items-center gap-2">
+                                    <Truck className="h-5 w-5" /> Shipping & Delivery
+                                </span>
+                                {(order.deliveryMethodInfo?.label || deliveryCharge?.label) && (
+                                    <Badge variant="outline" className="font-medium text-xs">
+                                        {order.deliveryMethodInfo?.label || deliveryCharge?.label}
+                                    </Badge>
+                                )}
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {order.shippingContact.addressLines.length > 0 ? (
-                                <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                                    {order.shippingContact.addressLines.map((line, i) => (
-                                        <div key={i}>{line}</div>
-                                    ))}
+                            {(order.deliveryMethodInfo?.label || deliveryCharge?.label) && (
+                                <div className="flex justify-between items-center text-sm pb-2 border-b">
+                                    <span className="text-muted-foreground font-medium">Delivery Method:</span>
+                                    <span className="font-semibold text-foreground">{order.deliveryMethodInfo?.label || deliveryCharge?.label}</span>
                                 </div>
-                            ) : (
-                                <div className="text-sm text-muted-foreground">No shipping address provided</div>
                             )}
+                            <div>
+                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
+                                    Address
+                                </span>
+                                {order.shippingContact.addressLines.length > 0 ? (
+                                    <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                                        {order.shippingContact.addressLines.map((line, i) => (
+                                            <div key={i}>{line}</div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-sm text-muted-foreground">No shipping address provided</div>
+                                )}
+                            </div>
                         </CardContent>
                     </Card>
 

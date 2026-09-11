@@ -147,6 +147,20 @@ export function OrderDetailDialog({
                                 <DetailCard title="Billing">
                                     <AddressBlock contact={order.billingContact} emptyFallback="No billing details provided." />
                                 </DetailCard>
+                                <DetailCard title="Methods & Payment Data">
+                                    <DetailLine label="Payment Method" value={order.paymentMethodInfo?.label || "Cash on delivery"} />
+                                    <DetailLine label="Delivery Method" value={order.deliveryMethodInfo?.label || "—"} />
+                                    {order.paymentMethodInfo?.customFieldsData && order.paymentMethodInfo.customFieldsData.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t space-y-1">
+                                            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground block">
+                                                Submitted Payment Details
+                                            </span>
+                                            {order.paymentMethodInfo.customFieldsData.map((f) => (
+                                                <DetailLine key={f.id} label={f.label} value={f.value} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </DetailCard>
                                 <DetailCard title="Summary">
                                     <div className="space-y-2">
                                         {totals?.map(item => (

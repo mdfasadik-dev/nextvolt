@@ -6,6 +6,19 @@ import type { Attribute } from '@/lib/services/attributeService';
 import { StorageService } from '@/lib/services/storageService';
 import { DEFAULT_PRODUCT_BADGE_COLOR, type ProductBadgeColor } from '@/lib/constants/product-badge';
 
+import { listProductDatasheets } from '../actions';
+import type { ProductDatasheetInput } from '@/lib/services/productDatasheetService';
+
+export interface FormDatasheetItem {
+    key: string;
+    id?: string;
+    name: string;
+    file_url?: string;
+    file_type: "pdf" | "image";
+    file_size?: number | null;
+    file?: File;
+}
+
 export interface ProductFormValues {
     name: string;
     slug: string | null;
@@ -17,6 +30,7 @@ export interface ProductFormValues {
     is_featured: boolean;
     main_image_url: string | null;
     image_urls?: string[];
+    datasheets?: ProductDatasheetInput[];
     badge?: {
         label: string;
         color: ProductBadgeColor;
@@ -105,6 +119,7 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
     const [submitting, setSubmitting] = useState(false);
     const [uploading, setUploading] = useState(false); // during submit
     const [imageWarning, setImageWarning] = useState<string | null>(null);
+    const [datasheets, setDatasheets] = useState<FormDatasheetItem[]>([]);
 
     useEffect(() => {
         if (editing) {
@@ -128,6 +143,21 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
             setBadgeStartsAt(toLocalDateTimeInput(editing.badge?.starts_at));
             setBadgeEndsAt(toLocalDateTimeInput(editing.badge?.ends_at));
             setBadgeIsActive(editing.badge?.is_active ?? true);
+
+            listProductDatasheets(editing.id).then((list) => {
+                setDatasheets(
+                    list.map((d) => ({
+                        key: d.id,
+                        id: d.id,
+                        name: d.name,
+                        file_url: d.file_url,
+                        file_type: d.file_type as "pdf" | "image",
+                        file_size: d.file_size,
+                    }))
+                );
+            }).catch(() => {
+                setDatasheets([]);
+            });
         } else {
             setNameDraft('');
             setSlugDraft('');
@@ -154,6 +184,7 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
             setInvUnit('pcs');
             setInvDiscountType('none');
             setInvDiscountValue('0');
+            setDatasheets([]);
         }
     }, [editing, categories]);
 
@@ -228,6 +259,40 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
                 throw new Error('Badge end date must be later than start date.');
             }
 
+            // Upload pending datasheets
+            const resolvedDatasheets: ProductDatasheetInput[] = [];
+            for (let i = 0; i < datasheets.length; i++) {
+                const item = datasheets[i];
+                if (item.file) {
+                    const body = new FormData();
+                    body.append('file', item.file);
+                    const res = await fetch('/api/uploads/datasheet', {
+                        method: 'POST',
+                        body,
+                    });
+                    const json = await res.json();
+                    if (!res.ok) {
+                        throw new Error(json.error || `Failed to upload datasheet "${item.name}"`);
+                    }
+                    resolvedDatasheets.push({
+                        name: item.name,
+                        file_url: json.publicUrl,
+                        file_type: json.fileType || item.file_type,
+                        file_size: json.fileSize || item.file_size,
+                        sort_order: i,
+                    });
+                } else if (item.file_url) {
+                    resolvedDatasheets.push({
+                        id: item.id,
+                        name: item.name,
+                        file_url: item.file_url,
+                        file_type: item.file_type,
+                        file_size: item.file_size,
+                        sort_order: i,
+                    });
+                }
+            }
+
             const payload: ProductFormValues = {
                 name: fd.get('name') as string,
                 slug: finalSlug,
@@ -239,6 +304,7 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
                 is_featured: fd.get('is_featured') === 'on',
                 main_image_url: finalImageUrl,
                 image_urls: finalImageUrls,
+                datasheets: resolvedDatasheets,
                 badge: badgeEnabled && normalizedBadgeLabel
                     ? {
                         label: normalizedBadgeLabel,
@@ -303,6 +369,7 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
                 setInvUnit('pcs');
                 setInvDiscountType('none');
                 setInvDiscountValue('0');
+                setDatasheets([]);
             }
             callbacks?.onAfterSuccess?.();
         } catch (err) {
@@ -330,6 +397,25 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
 
     function setImageAsCover(source: 'existing' | 'pending', index: number) {
         setCoverSelection({ source, index });
+    }
+
+    function addDatasheet(name: string, file: File, fileType: "pdf" | "image") {
+        const item: FormDatasheetItem = {
+            key: `pending-ds-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            name: name.trim(),
+            file,
+            file_type: fileType,
+            file_size: file.size,
+        };
+        setDatasheets((prev) => [...prev, item]);
+    }
+
+    function removeDatasheet(key: string) {
+        setDatasheets((prev) => prev.filter((d) => d.key !== key));
+    }
+
+    function updateDatasheetName(key: string, name: string) {
+        setDatasheets((prev) => prev.map((d) => (d.key === key ? { ...d, name } : d)));
     }
 
     const previewImages: PreviewImage[] = useMemo(() => ([
@@ -384,6 +470,8 @@ export function useProductFormLogic(editing: ProductWithImages | null, categorie
         badgeIsActive, setBadgeIsActive,
         submitting, uploading,
         detailsMd, setDetailsMd,
+        // datasheets
+        datasheets, setDatasheets, addDatasheet, removeDatasheet, updateDatasheetName,
         // actions
         addCroppedFile,
         removeExistingImage,

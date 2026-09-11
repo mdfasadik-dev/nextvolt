@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ProductCardsGrid } from "@/components/public/product-cards-grid";
 import type { LoadGroupWithItems, MetaFieldWithOptions } from "@/lib/services/loadCalculatorService";
 import { LoadIcon } from "./load-icon";
+import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
 import { getSuggestions, type SuggestionResult } from "../actions";
 
 type Quantities = Record<string, number>;
@@ -40,10 +41,12 @@ export function LoadCalculator({
     groups,
     fields,
     currencySymbol,
+    contactPhone = "",
 }: {
     groups: LoadGroupWithItems[];
     fields: MetaFieldWithOptions[];
     currencySymbol: string;
+    contactPhone?: string;
 }) {
     const [activeGroup, setActiveGroup] = useState(groups[0]?.id ?? "");
     const [quantities, setQuantities] = useState<Quantities>({});
@@ -73,6 +76,68 @@ export function LoadCalculator({
     const primaryTotal = totalsByUnit.get(primaryUnit) || 0;
     const otherTotals = Array.from(totalsByUnit.entries()).filter(([unit]) => unit !== primaryUnit);
     const hasSelection = Array.from(totalsByUnit.values()).some(value => value > 0);
+
+    const whatsappUrl = useMemo(() => {
+        if (!contactPhone) return null;
+        const digits = contactPhone.replace(/[^0-9]/g, "");
+        if (digits.length < 8) return null;
+
+        const lines: string[] = [
+            "Hello! I need a consultation for my load requirements:\n",
+            "📋 *Selected Items:*",
+        ];
+
+        let hasItems = false;
+        for (const group of groups) {
+            for (const item of group.load_items) {
+                const qty = quantities[item.id] || 0;
+                if (qty > 0) {
+                    hasItems = true;
+                    const itemVal = Number(item.unit_value);
+                    const totalVal = qty * itemVal;
+                    lines.push(`• ${qty}x ${item.name} - ${totalVal}${group.unit_symbol}`);
+                }
+            }
+        }
+
+        if (!hasItems) return null;
+
+        lines.push(`\n⚡ *Total Load:* ${Math.round(primaryTotal)}${primaryUnit}`);
+        if (otherTotals.length > 0) {
+            const othersStr = otherTotals.map(([unit, val]) => `${Math.round(val)}${unit}`).join(", ");
+            lines.push(`*Other Load Totals:* ${othersStr}`);
+        }
+
+        const metaLines: string[] = [];
+        for (const field of fields) {
+            const val = meta[field.key];
+            if (val != null && val !== "" && !(Array.isArray(val) && val.length === 0)) {
+                let displayVal = "";
+                if (Array.isArray(val)) {
+                    displayVal = val
+                        .map(v => {
+                            const opt = field.calculator_meta_field_options.find(o => o.value === v);
+                            return opt ? opt.label : v;
+                        })
+                        .join(", ");
+                } else {
+                    const opt = field.calculator_meta_field_options.find(o => o.value === String(val));
+                    displayVal = opt ? opt.label : `${val} ${field.unit_symbol || ""}`.trim();
+                }
+                metaLines.push(`• ${field.label}: ${displayVal}`);
+            }
+        }
+
+        if (metaLines.length > 0) {
+            lines.push("\n⚙️ *Preferences:*");
+            lines.push(...metaLines);
+        }
+
+        lines.push("\nPlease suggest the best solution for me.");
+
+        const text = encodeURIComponent(lines.join("\n"));
+        return `https://wa.me/${digits}?text=${text}`;
+    }, [contactPhone, groups, quantities, primaryTotal, primaryUnit, otherTotals, fields, meta]);
 
     function setQuantity(itemId: string, next: number, max?: number | null) {
         const clamped = Math.max(0, max != null ? Math.min(next, max) : next);
@@ -249,7 +314,7 @@ export function LoadCalculator({
                                 <button
                                     type="button"
                                     onClick={reset}
-                                    className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                                    className="flex w-full items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground pt-1"
                                 >
                                     <RotateCcw className="h-3 w-3" /> Reset selection
                                 </button>
@@ -286,14 +351,43 @@ export function LoadCalculator({
                                     badgeMap={result.badgeMap}
                                     symbol={currencySymbol}
                                 />
+                                <div className="mt-8 flex flex-col items-center justify-center gap-3 border-t pt-6 text-center">
+                                    <p className="text-lg font-bold tracking-tight text-foreground sm:text-xl">Can&apos;t find right solution?</p>
+                                    <a
+                                        href={whatsappUrl || "#"}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={`inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 ${
+                                            !whatsappUrl ? "opacity-50 pointer-events-none" : ""
+                                        }`}
+                                    >
+                                        <WhatsAppIcon className="h-4 w-4" />
+                                        <span>Consult Us</span>
+                                    </a>
+                                </div>
                             </>
                         ) : (
-                            <div className="py-8 text-center">
-                                <p className="text-base font-semibold">No matching products yet</p>
-                                <p className="mt-1 text-sm text-muted-foreground">
-                                    We could not find a configured solution for {Math.round(primaryTotal)}
-                                    {primaryUnit}. Please contact us and we will help you pick the right setup.
-                                </p>
+                            <div className="py-8 text-center space-y-4">
+                                <div>
+                                    <p className="text-base font-semibold">No matching products yet</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        We could not find a configured solution for {Math.round(primaryTotal)}
+                                        {primaryUnit}. Please contact us and we will help you pick the right setup.
+                                    </p>
+                                </div>
+                                <div className="flex flex-col items-center justify-center gap-3 pt-2">
+                                    <a
+                                        href={whatsappUrl || "#"}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className={`inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 ${
+                                            !whatsappUrl ? "opacity-50 pointer-events-none" : ""
+                                        }`}
+                                    >
+                                        <WhatsAppIcon className="h-4 w-4" />
+                                        <span>Consult Us</span>
+                                    </a>
+                                </div>
                             </div>
                         )}
                     </section>

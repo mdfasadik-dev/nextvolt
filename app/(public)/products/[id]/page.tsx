@@ -6,6 +6,7 @@ import { createPublicClient } from "@/lib/supabase/server";
 import { absoluteUrl, buildPageMetadata, SEO_CONFIG } from "@/lib/seo";
 import type { Tables } from "@/lib/types/supabase";
 import { ProductBadgeService } from "@/lib/services/productBadgeService";
+import { ProductDatasheetService } from "@/lib/services/productDatasheetService";
 import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 
 export const revalidate = 900;
@@ -216,6 +217,8 @@ async function fetchProduct(idOrSlug: string) {
         if (pct > maxDiscountPercent) maxDiscountPercent = pct;
     }
 
+    const datasheets = await ProductDatasheetService.listByProduct(product.id);
+
     return {
         product,
         category,
@@ -226,6 +229,7 @@ async function fetchProduct(idOrSlug: string) {
         variants,
         productImages,
         badge,
+        datasheets,
         baseQty,
         baseUnit,
         storePhone: store?.contact_phone || null,
@@ -428,6 +432,7 @@ export default async function ProductDetailPage(props: ProductPageProps) {
                     mainImageUrl={product.main_image_url}
                     imageUrls={productImages}
                     badge={badge}
+                    datasheets={data.datasheets}
                     description={product.description}
                     attributes={attributes}
                     baseQty={baseQty}

@@ -49,6 +49,7 @@ export const secondaryNav: NavItem[] = [
         items: [
             { title: "Store", href: "/admin/settings", icon: Store },
             { title: "Delivery", href: "/admin/settings/delivery", icon: Package },
+            { title: "Payment", href: "/admin/settings/payment", icon: FileText },
             { title: "Charges", href: "/admin/settings/charges", icon: FileText },
             { title: "Data Backup", href: "/admin/settings/backup", icon: Database },
             { title: "Coupons", href: "/admin/coupons", icon: Tags },

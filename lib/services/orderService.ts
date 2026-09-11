@@ -60,6 +60,24 @@ export interface ChargeDetail {
     label: string | null; // Derived from metadata or elsewhere if needed
 }
 
+export interface PaymentDataField {
+    id: string;
+    label: string;
+    value: string;
+}
+
+export interface PaymentMethodSummary {
+    id?: string;
+    key?: string;
+    label: string;
+    customFieldsData?: PaymentDataField[];
+}
+
+export interface DeliveryMethodSummary {
+    id?: string;
+    label: string;
+}
+
 export interface OrderDetail extends OrderSummary {
     shippingAddress: Record<string, unknown> | null;
     billingAddress: Record<string, unknown> | null;
@@ -67,6 +85,8 @@ export interface OrderDetail extends OrderSummary {
     billingContact: ContactDetails;
     items: OrderItemDetail[];
     charges: ChargeDetail[];
+    paymentMethodInfo?: PaymentMethodSummary | null;
+    deliveryMethodInfo?: DeliveryMethodSummary | null;
 }
 
 export interface OrderListResult {
@@ -127,6 +147,97 @@ function extractContactDetails(data: unknown): ContactDetails {
         phone: phone ?? null,
         addressLines: addressParts,
     };
+}
+
+function extractPaymentMethodInfo(
+    shippingAddressData: unknown,
+    notesData: string | null
+): PaymentMethodSummary | null {
+    if (shippingAddressData && typeof shippingAddressData === "object") {
+        const obj = shippingAddressData as Record<string, unknown>;
+        if (obj.payment_method_info && typeof obj.payment_method_info === "object") {
+            const pmi = obj.payment_method_info as Record<string, unknown>;
+            const rawFields = Array.isArray(pmi.custom_fields_data) ? pmi.custom_fields_data : [];
+            const customFieldsData: PaymentDataField[] = rawFields
+                .map((f: any) => ({
+                    id: String(f?.id || ""),
+                    label: String(f?.label || ""),
+                    value: String(f?.value || ""),
+                }))
+                .filter((f) => f.label && f.value);
+
+            return {
+                id: typeof pmi.id === "string" ? pmi.id : undefined,
+                key: typeof pmi.key === "string" ? pmi.key : undefined,
+                label: typeof pmi.label === "string" ? pmi.label : "Payment Method",
+                customFieldsData,
+            };
+        }
+    }
+
+    if (notesData) {
+        const match = notesData.match(/\[(.*?)\]\n((?:• .*\n?)+)/);
+        if (match) {
+            const label = match[1].trim();
+            const lines = match[2].split("\n").filter((l) => l.startsWith("• "));
+            const customFieldsData: PaymentDataField[] = lines.map((line, idx) => {
+                const content = line.replace(/^•\s*/, "");
+                const colonIdx = content.indexOf(":");
+                if (colonIdx !== -1) {
+                    return {
+                        id: `note_field_${idx}`,
+                        label: content.slice(0, colonIdx).trim(),
+                        value: content.slice(colonIdx + 1).trim(),
+                    };
+                }
+                return {
+                    id: `note_field_${idx}`,
+                    label: "Detail",
+                    value: content.trim(),
+                };
+            });
+            return {
+                label,
+                customFieldsData,
+            };
+        }
+    }
+
+    return null;
+}
+
+function extractDeliveryMethodInfo(
+    shippingAddressData: unknown,
+    orderChargesData: Array<{ type: string; metadata: unknown; delivery_id?: string | null }> | null
+): DeliveryMethodSummary | null {
+    if (shippingAddressData && typeof shippingAddressData === "object") {
+        const obj = shippingAddressData as Record<string, unknown>;
+        if (obj.delivery_method_info && typeof obj.delivery_method_info === "object") {
+            const dmi = obj.delivery_method_info as Record<string, unknown>;
+            return {
+                id: typeof dmi.id === "string" ? dmi.id : undefined,
+                label: typeof dmi.label === "string" ? dmi.label : "Delivery",
+            };
+        }
+    }
+
+    if (Array.isArray(orderChargesData)) {
+        const delCharge = orderChargesData.find((c) => c.type === "charge" && c.delivery_id);
+        if (delCharge) {
+            const metadata =
+                delCharge.metadata && typeof delCharge.metadata === "object" && !Array.isArray(delCharge.metadata)
+                    ? (delCharge.metadata as Record<string, unknown>)
+                    : null;
+            if (metadata?.label && typeof metadata.label === "string") {
+                return {
+                    id: delCharge.delivery_id ?? undefined,
+                    label: metadata.label,
+                };
+            }
+        }
+    }
+
+    return null;
 }
 
 export class OrderService {
@@ -500,6 +611,9 @@ export class OrderService {
                 }))
                 : [];
 
+            const paymentMethodInfo = extractPaymentMethodInfo(data.shipping_address, data.notes);
+            const deliveryMethodInfo = extractDeliveryMethodInfo(data.shipping_address, data.order_charges as any);
+
             return {
                 id: data.id,
                 createdAt: data.created_at,
@@ -520,7 +634,9 @@ export class OrderService {
                 shippingContact,
                 billingContact,
                 items,
-                charges
+                charges,
+                paymentMethodInfo,
+                deliveryMethodInfo,
             };
         });
     }

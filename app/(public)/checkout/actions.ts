@@ -1,6 +1,7 @@
 "use server";
 
 import { CheckoutService } from "@/lib/services/checkoutService";
+import { PaymentMethodService } from "@/lib/services/paymentMethodService";
 
 type CheckoutItemInput = {
     productId: string;
@@ -22,7 +23,16 @@ export async function getCheckoutDeliveryOptionsForItems(items: CheckoutItemInpu
     );
 }
 
-export async function calculateCheckout(items: CheckoutItemInput[], deliveryId?: string, couponCode?: string) {
+export async function getCheckoutPaymentMethods() {
+    return PaymentMethodService.listPublic();
+}
+
+export async function calculateCheckout(
+    items: CheckoutItemInput[],
+    deliveryId?: string,
+    couponCode?: string,
+    paymentMethodId?: string
+) {
     try {
         const result = await CheckoutService.calculateOrderTotals(
             items.map((item) => ({
@@ -33,6 +43,7 @@ export async function calculateCheckout(items: CheckoutItemInput[], deliveryId?:
             })),
             deliveryId,
             couponCode,
+            paymentMethodId
         );
         return { success: true, data: result };
     } catch (error: unknown) {

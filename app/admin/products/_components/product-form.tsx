@@ -3,7 +3,7 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ImagePlus, Loader2 as Spinner, Loader2, Star, Trash2, X } from "lucide-react";
+import { ImagePlus, Loader2 as Spinner, Loader2, Star, Trash2, X, FileText, FileImage, Plus, Paperclip } from "lucide-react";
 import Image from 'next/image';
 import type { Product } from "@/lib/services/productService";
 import type { Category } from "@/lib/services/categoryService";
@@ -59,10 +59,14 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
         badgeEndsAt, setBadgeEndsAt,
         badgeIsActive, setBadgeIsActive,
         submitting, uploading,
+        detailsMd, setDetailsMd,
+        datasheets, addDatasheet, removeDatasheet, updateDatasheetName,
         addCroppedFile, removeExistingImage, removePickedFile, setImageAsCover, handleSubmit,
         imageWarning, setImageWarning,
-        detailsMd, setDetailsMd,
     } = logic;
+
+    const [dsTitleInput, setDsTitleInput] = React.useState("");
+    const dsFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
     const badgeColorOption = PRODUCT_BADGE_COLOR_OPTIONS.find((option) => option.value === badgeColor);
     const isCustomBadgeColor = !badgeColorOption && !!badgeColor;
@@ -386,6 +390,96 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                     ) : (
                         <p className="text-[10px] text-muted-foreground">No badge will be shown on product images.</p>
                     )}
+                </div>
+
+                {/* Product Datasheets */}
+                <div className="space-y-2 rounded-md border p-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5 text-primary" />
+                            Product Datasheets
+                        </label>
+                        <span className="text-[10px] text-muted-foreground">PDF or Image</span>
+                    </div>
+
+                    <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                            <Input
+                                placeholder="Datasheet Title (e.g. REC Solar Panel Datasheet)"
+                                value={dsTitleInput}
+                                onChange={(e) => setDsTitleInput(e.target.value)}
+                                className="h-8 text-xs flex-1"
+                            />
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs shrink-0"
+                                onClick={() => dsFileInputRef.current?.click()}
+                            >
+                                <Plus className="mr-1 h-3.5 w-3.5" /> Attach File
+                            </Button>
+                            <input
+                                type="file"
+                                ref={dsFileInputRef}
+                                accept=".pdf,image/png,image/jpeg,image/webp,image/jpg"
+                                className="hidden"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const title = dsTitleInput.trim() || file.name;
+                                    if (file.type.startsWith("image/")) {
+                                         // Route image datasheets through existing image cropper/compression channel!
+                                         imageCropper.openWithFile(file, (croppedFile: File) => {
+                                             addDatasheet(title, croppedFile, "image");
+                                             setDsTitleInput("");
+                                         });
+                                    } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+                                        addDatasheet(title, file, "pdf");
+                                        setDsTitleInput("");
+                                    }
+                                    e.target.value = "";
+                                }}
+                            />
+                        </div>
+
+                        {datasheets.length === 0 ? (
+                            <p className="text-[10px] text-muted-foreground italic">No datasheets attached yet. Upload PDFs or compressed Images.</p>
+                        ) : (
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                {datasheets.map((ds) => (
+                                    <div key={ds.key} className="flex items-center justify-between gap-2 rounded border bg-muted/30 px-2.5 py-1.5 text-xs">
+                                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                                            {ds.file_type === "pdf" ? (
+                                                <FileText className="h-4 w-4 shrink-0 text-red-500" />
+                                            ) : (
+                                                <FileImage className="h-4 w-4 shrink-0 text-emerald-500" />
+                                            )}
+                                            <Input
+                                                value={ds.name}
+                                                onChange={(e) => updateDatasheetName(ds.key, e.target.value)}
+                                                className="h-7 text-xs font-medium bg-background"
+                                            />
+                                        </div>
+                                        <div className="flex shrink-0 items-center gap-1.5">
+                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase font-mono font-semibold text-muted-foreground">
+                                                {ds.file_type}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                                onClick={() => removeDatasheet(ds.key)}
+                                            >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
                 {attributes.length > 0 && (
                     <div className="space-y-2">

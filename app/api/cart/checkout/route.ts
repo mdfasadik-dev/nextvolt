@@ -25,6 +25,8 @@ interface CheckoutPayload {
     contact?: Record<string, unknown> | null;
     notes?: string | null;
     deliveryId?: string;
+    paymentMethodId?: string;
+    paymentData?: Record<string, unknown> | null;
     couponCode?: string;
 }
 
@@ -133,11 +135,62 @@ export async function POST(request: NextRequest) {
         const totals = await CheckoutService.calculateOrderTotals(
             calculationInput,
             body.deliveryId,
-            body.couponCode
+            body.couponCode,
+            body.paymentMethodId
         );
 
         const contactData = body.contact && typeof body.contact === "object" ? body.contact : null;
         const notes = typeof body.notes === "string" && body.notes.trim().length ? body.notes.trim() : null;
+
+        // Fetch Payment Method info & Custom Data if provided
+        let paymentMethodInfo: Record<string, unknown> | null = null;
+        if (body.paymentMethodId) {
+            const { data: pmData } = await supabase
+                .from("payment_methods")
+                .select("id, key, label, custom_fields")
+                .eq("id", body.paymentMethodId)
+                .maybeSingle();
+
+            if (pmData) {
+                const customFields = Array.isArray(pmData.custom_fields)
+                    ? (pmData.custom_fields as Array<{ id: string; label: string }>)
+                    : [];
+
+                const paymentDataObj = body.paymentData && typeof body.paymentData === "object" ? body.paymentData : {};
+
+                const customFieldsData = customFields
+                    .map((f) => {
+                        const rawVal = paymentDataObj[f.id];
+                        const valStr = typeof rawVal === "string" ? rawVal.trim() : rawVal != null ? String(rawVal).trim() : "";
+                        return valStr ? { id: f.id, label: f.label, value: valStr } : null;
+                    })
+                    .filter((item): item is { id: string; label: string; value: string } => !!item);
+
+                paymentMethodInfo = {
+                    id: pmData.id,
+                    key: pmData.key,
+                    label: pmData.label,
+                    custom_fields_data: customFieldsData,
+                };
+            }
+        }
+
+        // Fetch Delivery Method info if provided
+        let deliveryMethodInfo: Record<string, unknown> | null = null;
+        if (body.deliveryId) {
+            const { data: delData } = await supabase
+                .from("delivery")
+                .select("id, label")
+                .eq("id", body.deliveryId)
+                .maybeSingle();
+
+            if (delData) {
+                deliveryMethodInfo = {
+                    id: delData.id,
+                    label: delData.label,
+                };
+            }
+        }
 
         // 3. Prepare Charges from CheckoutService Calculation
         const charges: OrderChargeInsert[] = [];
@@ -182,8 +235,6 @@ export async function POST(request: NextRequest) {
         });
 
         // 3.5 Prepare Shipping Address JSON with Contact Info
-        // User requirements: No customers table. Store all info in shipping_address JSONB.
-        // Structure: { fullName, email, phone, address: "..." }
         let shippingAddressPayload: Json | null = null;
         if (contactData) {
             const shippingAddress = contactData.shipping_address;
@@ -196,12 +247,10 @@ export async function POST(request: NextRequest) {
                 fullName: toNullableString(contactData.fullName),
                 email: toNullableString(contactData.email),
                 phone: toNullableString(contactData.phone),
-                // Address might be a string in 'shipping_address' prop of contactData?
-                // The form sends: contact: { fullName, email, phone, shipping_address: { address: "..." } }
-                // So we flatten it or keep it?
-                // Let's flatten for simplicity as per OrderService extraction logic which looks for root keys or standard keys
                 address: toNullableString(nestedAddress),
-            };
+                payment_method_info: paymentMethodInfo,
+                delivery_method_info: deliveryMethodInfo || (totals.delivery ? { id: totals.delivery.id, label: totals.delivery.label } : null),
+            } as Json;
         }
 
         // 4. Create Order

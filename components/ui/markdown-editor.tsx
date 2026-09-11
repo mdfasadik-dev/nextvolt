@@ -294,16 +294,16 @@ function MarkdownEditorInner({
                 {/* {toolbarBtn(ImageIcon, () => insertImage(), "Image")} */}
                 {toolbarBtn(Minus, () => insertHr(), "Horizontal rule")}
 
-                {/* {preview === "toggle" && (
+                {preview === "toggle" && (
                     <button
                         type="button"
                         onClick={() => setShowPreview((p) => !p)}
-                        className="ml-auto text-[11px] px-2 py-1 rounded border bg-background hover:bg-muted transition"
+                        className="ml-auto text-[11px] px-2.5 py-1 rounded border bg-background hover:bg-muted font-medium transition"
                         aria-label="Toggle preview"
                     >
                         {showPreview ? "Edit" : "Preview"}
                     </button>
-                )} */}
+                )}
                 {preview === "split" && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Split View</span>}
             </div>
 

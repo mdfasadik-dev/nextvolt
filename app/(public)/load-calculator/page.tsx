@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LoadCalculatorService } from "@/lib/services/loadCalculatorService";
+import { StoreService } from "@/lib/services/storeService";
 import { buildPageMetadata } from "@/lib/seo";
 import { LoadCalculator } from "./_components/calculator";
 
@@ -13,11 +14,13 @@ export const metadata: Metadata = buildPageMetadata({
 });
 
 export default async function LoadCalculatorPage() {
-    const [groups, fields] = await Promise.all([
+    const [groups, fields, store] = await Promise.all([
         LoadCalculatorService.listGroupsPublic(),
         LoadCalculatorService.listFieldsPublic(),
+        StoreService.getFirstPublic(),
     ]);
     const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
+    const contactPhone = store?.contact_phone || "";
 
     return (
         <div className="w-full max-w-7xl px-4 py-10 md:px-6">
@@ -27,7 +30,12 @@ export default async function LoadCalculatorPage() {
                     Pick the appliances you want to run during a power cut, and we will suggest the right solution.
                 </p>
             </header>
-            <LoadCalculator groups={groups} fields={fields} currencySymbol={currencySymbol} />
+            <LoadCalculator
+                groups={groups}
+                fields={fields}
+                currencySymbol={currencySymbol}
+                contactPhone={contactPhone}
+            />
         </div>
     );
 }

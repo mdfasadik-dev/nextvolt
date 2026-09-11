@@ -5,13 +5,23 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Markdown } from '@/components/markdown';
-import { FileImage } from 'lucide-react';
+import { FileImage, FileText } from 'lucide-react';
 import { AddToCartButton } from '@/components/cart/add-to-cart-button';
 import { ProductBadgePill } from '@/components/products/product-badge-pill';
+import { DatasheetViewerModal } from '@/components/public/datasheet-viewer-modal';
+import { WhatsAppIcon } from '@/components/icons/whatsapp-icon';
 
 interface VariantItem { id: string; title: string | null; sku: string | null; image_url: string | null; minPrice: number | null; maxPrice: number | null; minOriginalPrice?: number | null; maxOriginalPrice?: number | null; totalQty?: number | null; unit?: string | null; details_md?: string | null }
 
 interface AttributeItem { id: string; name: string; data_type: string; value: string }
+
+export interface DatasheetPropItem {
+    id: string;
+    name: string;
+    file_url: string;
+    file_type: string;
+    file_size?: number | null;
+}
 
 interface Props {
     productId: string;
@@ -25,6 +35,7 @@ interface Props {
     mainImageUrl?: string | null;
     imageUrls?: string[];
     badge?: { label: string; color: string } | null;
+    datasheets?: DatasheetPropItem[];
     description?: string | null;
     attributes: AttributeItem[];
     baseQty: number | null;
@@ -34,7 +45,7 @@ interface Props {
     maxDiscountPercent?: number;
 }
 
-export default function ProductDetailClient({ productId, productSlug, basePrice, basePriceValue, basePriceOriginal, variants, productName, brand, mainImageUrl, imageUrls = [], badge = null, description, attributes, baseQty, baseUnit, productDetailsMd, storePhone, maxDiscountPercent = 0 }: Props) {
+export default function ProductDetailClient({ productId, productSlug, basePrice, basePriceValue, basePriceOriginal, variants, productName, brand, mainImageUrl, imageUrls = [], badge = null, datasheets = [], description, attributes, baseQty, baseUnit, productDetailsMd, storePhone, maxDiscountPercent = 0 }: Props) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathname = usePathname();
@@ -42,6 +53,8 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
     const [activeImageUrl, setActiveImageUrl] = useState<string | null>(null);
     const [zoomActive, setZoomActive] = useState(false);
     const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 });
+    const [activeTab, setActiveTab] = useState<'description' | 'datasheet'>('description');
+    const [activeDatasheet, setActiveDatasheet] = useState<DatasheetPropItem | null>(null);
 
     // Initialize / sync selection from URL (supports back/forward navigation)
     useEffect(() => {
@@ -354,6 +367,7 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                                         )}
                                         onClick={!canAddToCart ? (e) => e.preventDefault() : undefined}
                                     >
+                                        <WhatsAppIcon className="h-4 w-4 shrink-0" />
                                         <span>WhatsApp Inquiry</span>
                                     </a>
                                 )}
@@ -369,21 +383,87 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
                             </ul>
                         </div>
                     )}
-                    {description && (
-                        <div>
-                            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground mb-2">DESCRIPTION</h2>
-                            <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{description}</p>
+                </div>
+            </div>
+
+            {/* Description & Datasheet Tab Section */}
+            <div className="mt-8 border-t pt-4">
+                <div className="flex items-center justify-end gap-6 border-b border-border/40 pb-3 text-sm font-medium">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('description')}
+                        className={cn(
+                            "relative py-1 transition-colors hover:text-foreground",
+                            activeTab === 'description' ? "text-foreground font-semibold" : "text-muted-foreground"
+                        )}
+                    >
+                        Description
+                        {activeTab === 'description' && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('datasheet')}
+                        className={cn(
+                            "relative py-1 transition-colors hover:text-foreground",
+                            activeTab === 'datasheet' ? "text-foreground font-semibold" : "text-muted-foreground"
+                        )}
+                    >
+                        Datasheet
+                        {activeTab === 'datasheet' && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
+                        )}
+                    </button>
+                </div>
+
+                {/* Tab Content */}
+                <div className="py-6">
+                    {activeTab === 'description' ? (
+                        <div className="space-y-6">
+                            {description && (
+                                <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{description}</p>
+                            )}
+                            {activeMarkdown && (
+                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                    <Markdown content={activeMarkdown} />
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {datasheets && datasheets.length > 0 ? (
+                                <div className="space-y-3">
+                                    {datasheets.map((ds) => (
+                                        <div key={ds.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setActiveDatasheet(ds)}
+                                                className="text-left text-sm font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 underline decoration-sky-600/40 hover:decoration-sky-600 underline-offset-4 transition-colors"
+                                            >
+                                                {ds.name}
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground italic">No datasheets available for this product.</p>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
-            {
-                activeMarkdown && (
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <Markdown content={activeMarkdown} />
-                    </div>
-                )
-            }
+
+            {/* Datasheet Viewer Modal */}
+            {activeDatasheet && (
+                <DatasheetViewerModal
+                    isOpen={Boolean(activeDatasheet)}
+                    onClose={() => setActiveDatasheet(null)}
+                    title={activeDatasheet.name}
+                    fileUrl={activeDatasheet.file_url}
+                    fileType={activeDatasheet.file_type === "pdf" ? "pdf" : "image"}
+                />
+            )}
         </>
     );
 }
