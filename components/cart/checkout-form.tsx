@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { calculateCheckout, getCheckoutDeliveryOptionsForItems, getCheckoutPaymentMethods } from "@/app/(public)/checkout/actions";
 import { CalculatedTotals } from "@/lib/services/checkoutService";
-import { PaymentMethodWithCharges, PaymentMethodCustomField } from "@/lib/services/paymentMethodService";
+import { PaymentMethodWithCharges, PaymentMethodCustomField, parseCustomFields } from "@/lib/types/payment-method";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 import { Markdown } from "@/components/markdown";
@@ -69,15 +69,58 @@ export function CheckoutForm() {
     const currencyCode = DEFAULT_CURRENCY_CODE;
 
     const selectedPm = paymentMethods.find((pm) => pm.id === selectedPayment);
-    const customFieldsList = (selectedPm?.custom_fields as PaymentMethodCustomField[]) || [];
+    const customFieldsList = parseCustomFields(selectedPm?.custom_fields);
     const hasInstructionsOrFields = Boolean(
         selectedPm && (
             (selectedPm.instructions && selectedPm.instructions.trim().length > 0) ||
             customFieldsList.length > 0 ||
+            (selectedPm.instruction_images && selectedPm.instruction_images.length > 0) ||
             (selectedPm.button_label && selectedPm.button_label.trim() !== "Place Order")
         )
     );
     const checkoutButtonLabel = selectedPm?.button_label?.trim() || "Place Order";
+
+    const getPayableAmountInfo = () => {
+        if (!totals) return null;
+        const mode = selectedPm?.payable_amount_mode || "total_payable";
+        if (mode === "none") return null;
+
+        const deliveryAmount = totals.delivery?.amount || 0;
+        const deliveryLabel = totals.delivery?.label ? `Delivery (${totals.delivery.label})` : "Delivery Charge";
+
+        // Filter ONLY positive extra charges (exclude discounts)
+        const extraCharges = totals.charges.filter(
+            (c) => c.type !== "discount" && c.amount > 0
+        );
+        const extraChargesSum = extraCharges.reduce((acc, c) => acc + c.amount, 0);
+        const allChargesSum = deliveryAmount + extraChargesSum;
+
+        const extraChargesText = extraCharges.length > 0
+            ? extraCharges.map((c) => c.label).join(" + ")
+            : null;
+
+        switch (mode) {
+            case "subtotal":
+                return { label: "Subtotal Payable (Items Price)", amount: totals.subtotal };
+            case "delivery_charge":
+                return { label: `Payable: ${deliveryLabel}`, amount: deliveryAmount };
+            case "extra_charges":
+                return {
+                    label: extraChargesText ? `Payable: ${extraChargesText}` : "Extra Charges Payable",
+                    amount: extraChargesSum,
+                };
+            case "all_charges":
+                return {
+                    label: extraChargesText ? `Payable: ${deliveryLabel} + ${extraChargesText}` : `Payable: ${deliveryLabel}`,
+                    amount: allChargesSum,
+                };
+            case "total_payable":
+            default:
+                return { label: "Total Payable Amount", amount: totals.total };
+        }
+    };
+
+    const payableAmountInfo = getPayableAmountInfo();
 
     const isInstructionFormValid = customFieldsList.every((f) => {
         if (!f.required) return true;
@@ -682,18 +725,46 @@ export function CheckoutForm() {
                             </div>
                         ) : null}
 
-                        {((selectedPm?.instructions && selectedPm.instructions.trim().length > 0) ||
-                            (selectedPm?.button_label && selectedPm.button_label.trim() !== "Place Order")) ? (
-                            <div className="flex flex-col items-center justify-center p-4 border rounded-lg bg-background shadow-xs space-y-1">
-                                <Image
-                                    src="/bangla_qr.webp"
-                                    alt="Bangla QR Code"
-                                    width={220}
-                                    height={220}
-                                    className="rounded-md border object-contain max-h-[220px]"
-                                />
-                                <p className="text-xs text-muted-foreground font-medium text-center">Scan to pay with any Mobile Banking App</p>
-                                <p className="text-xs text-muted-foreground font-medium text-center text-orange-600">(Bangla QR)</p>
+                        {/* Dynamic Payment Instruction / QR Images */}
+                        {selectedPm?.instruction_images && selectedPm.instruction_images.length > 0 ? (
+                            <div className="space-y-3 rounded-lg border bg-card p-4 flex flex-col items-center justify-center">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider text-center">Payment Instruction / QR Codes</p>
+                                <div
+                                    className={
+                                        selectedPm.instruction_images.length === 1
+                                            ? "flex justify-center items-center w-full"
+                                            : "grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl mx-auto justify-items-center justify-center items-center"
+                                    }
+                                >
+                                    {selectedPm.instruction_images.map((img) => (
+                                        <div key={img.id} className="w-full max-w-[220px] flex flex-col items-center justify-center p-3 rounded-lg border bg-background text-center space-y-2 shadow-2xs">
+                                            <div className="relative w-full aspect-square overflow-hidden rounded-md border bg-muted/20 flex items-center justify-center">
+                                                <Image
+                                                    src={img.url}
+                                                    alt={img.label}
+                                                    fill
+                                                    className="object-contain p-1"
+                                                />
+                                            </div>
+                                            <p className="text-xs font-semibold text-foreground text-center line-clamp-1" title={img.label}>{img.label}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* Specified Payable Amount Display Banner */}
+                        {payableAmountInfo ? (
+                            <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-between text-center sm:text-left gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                                <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+                                    <p className="text-xs font-medium text-muted-foreground text-center sm:text-left">{payableAmountInfo.label}</p>
+                                    <p className="text-xl font-bold text-primary text-center sm:text-left">{formatMoney(payableAmountInfo.amount, symbol)}</p>
+                                </div>
+                                <div className="w-full sm:w-auto flex justify-center sm:justify-end text-center">
+                                    <span className="inline-flex items-center justify-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary text-center">
+                                        Payable Amount
+                                    </span>
+                                </div>
                             </div>
                         ) : null}
 

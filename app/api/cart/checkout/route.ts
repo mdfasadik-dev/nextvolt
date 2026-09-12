@@ -5,6 +5,7 @@ import { OrderService, OrderChargeInsert } from "@/lib/services/orderService";
 import { CheckoutService } from "@/lib/services/checkoutService";
 import { TelegramService } from "@/lib/services/telegramService";
 import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
+import { parseCustomFields } from "@/lib/types/payment-method";
 import type { Json } from "@/lib/types/supabase";
 
 export const runtime = "nodejs";
@@ -152,9 +153,7 @@ export async function POST(request: NextRequest) {
                 .maybeSingle();
 
             if (pmData) {
-                const customFields = Array.isArray(pmData.custom_fields)
-                    ? (pmData.custom_fields as Array<{ id: string; label: string }>)
-                    : [];
+                const customFields = parseCustomFields(pmData.custom_fields);
 
                 const paymentDataObj = body.paymentData && typeof body.paymentData === "object" ? body.paymentData : {};
 

@@ -44,6 +44,13 @@ export const IMAGE_PRESETS = {
         title: "Crop cover image",
         description: "Cover images display in 16:9 on project pages.",
     },
+    /** Payment instruction images render square (1:1). */
+    paymentInstruction: {
+        aspectRatio: 1,
+        processOptions: { maxDimension: 1000, mimeType: "image/webp" as const },
+        title: "Crop payment instruction image",
+        description: "Payment instruction QR/images display as square. Drag to reposition, zoom to fit.",
+    },
     /** In-page project images render 16:10. */
     projectSection: {
         aspectRatio: 16 / 10,

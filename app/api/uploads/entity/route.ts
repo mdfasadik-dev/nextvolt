@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 // Generic entity image upload endpoint: expects query param ?type=products|categories|variants
 export const runtime = 'nodejs';
 
-const ALLOWED_TYPES = new Set(['products', 'categories', 'variants', 'projects']);
+const ALLOWED_TYPES = new Set(['products', 'categories', 'variants', 'projects', 'payment_instructions']);
 
 export async function POST(req: NextRequest) {
     try {

@@ -158,15 +158,41 @@ export async function getPaymentMethodsAdmin() {
     return PaymentMethodService.listAdmin();
 }
 
-export async function createPaymentMethodAction(payload: PaymentMethodInsert, chargeOptionIds: string[]) {
-    const res = await PaymentMethodService.create(payload, chargeOptionIds);
+export async function getPaymentInstructionImagesAction() {
+    return PaymentMethodService.listInstructionImages();
+}
+
+export async function createPaymentInstructionImageAction(label: string, url: string) {
+    const res = await PaymentMethodService.createInstructionImage(label, url);
     revalidatePath("/admin/settings/payment");
     revalidatePath("/checkout");
     return res;
 }
 
-export async function updatePaymentMethodAction(id: string, payload: PaymentMethodUpdate, chargeOptionIds?: string[]) {
-    const res = await PaymentMethodService.update(id, payload, chargeOptionIds);
+export async function deletePaymentInstructionImageAction(id: string) {
+    await PaymentMethodService.deleteInstructionImage(id);
+    revalidatePath("/admin/settings/payment");
+    revalidatePath("/checkout");
+}
+
+export async function createPaymentMethodAction(
+    payload: PaymentMethodInsert,
+    chargeOptionIds: string[],
+    instructionImageIds: string[] = []
+) {
+    const res = await PaymentMethodService.create(payload, chargeOptionIds, instructionImageIds);
+    revalidatePath("/admin/settings/payment");
+    revalidatePath("/checkout");
+    return res;
+}
+
+export async function updatePaymentMethodAction(
+    id: string,
+    payload: PaymentMethodUpdate,
+    chargeOptionIds?: string[],
+    instructionImageIds?: string[]
+) {
+    const res = await PaymentMethodService.update(id, payload, chargeOptionIds, instructionImageIds);
     revalidatePath("/admin/settings/payment");
     revalidatePath("/checkout");
     return res;

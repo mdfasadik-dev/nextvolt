@@ -62,7 +62,7 @@ export class StorageService {
         return data;
     }
 
-    static async uploadEntityImage(type: 'products' | 'categories' | 'variants' | 'projects', file: File): Promise<{ publicUrl: string; path: string }> {
+    static async uploadEntityImage(type: 'products' | 'categories' | 'variants' | 'projects' | 'payment_instructions', file: File): Promise<{ publicUrl: string; path: string }> {
         const fd = new FormData();
         fd.append('file', file);
         const res = await fetch(`/api/uploads/entity?type=${encodeURIComponent(type)}`, { method: 'POST', body: fd });

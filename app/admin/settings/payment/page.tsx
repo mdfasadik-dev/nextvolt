@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import {
     getPaymentMethodsAdmin,
     createPaymentMethodAction,
@@ -8,6 +9,9 @@ import {
     deletePaymentMethodAction,
     updatePaymentMethodOrderAction,
     getChargeOptions,
+    getPaymentInstructionImagesAction,
+    createPaymentInstructionImageAction,
+    deletePaymentInstructionImageAction,
 } from "../../actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, Pencil, Trash2, GripVertical, Check } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, GripVertical, Check, ImageIcon } from "lucide-react";
 import { useToast } from "@/components/ui/toast-provider";
 import {
     AlertDialog,
@@ -45,8 +49,18 @@ import {
     useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { PaymentMethodWithCharges, ChargeOption, PaymentMethodCustomField } from "@/lib/services/paymentMethodService";
+import {
+    parseCustomFields,
+    type PaymentMethodWithCharges,
+    type ChargeOption,
+    type PaymentMethodCustomField,
+    type PaymentInstructionImage,
+    type PayableAmountMode,
+} from "@/lib/types/payment-method";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { useImageCropper } from "@/lib/hooks/useImageCropper";
+import { IMAGE_PRESETS } from "@/lib/constants/image-presets";
+import { StorageService } from "@/lib/services/storageService";
 
 function SortableRow({
     pm,
@@ -75,6 +89,19 @@ function SortableRow({
             </TableCell>
             <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
                 {pm.note || "—"}
+            </TableCell>
+            <TableCell>
+                {pm.instruction_images && pm.instruction_images.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                        {pm.instruction_images.map((img) => (
+                            <span key={img.id} className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
+                                <ImageIcon className="h-3 w-3" /> {img.label}
+                            </span>
+                        ))}
+                    </div>
+                ) : (
+                    <span className="text-xs text-muted-foreground">No images</span>
+                )}
             </TableCell>
             <TableCell>
                 {pm.charges.length > 0 ? (
@@ -109,6 +136,7 @@ export default function PaymentSettingsPage() {
     const { push } = useToast();
     const [methods, setMethods] = useState<PaymentMethodWithCharges[]>([]);
     const [allCharges, setAllCharges] = useState<ChargeOption[]>([]);
+    const [instructionImages, setInstructionImages] = useState<PaymentInstructionImage[]>([]);
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [currentMethod, setCurrentMethod] = useState<PaymentMethodWithCharges | null>(null);
@@ -123,7 +151,14 @@ export default function PaymentSettingsPage() {
     const [active, setActive] = useState(true);
     const [isDefault, setIsDefault] = useState(false);
     const [selectedChargeIds, setSelectedChargeIds] = useState<string[]>([]);
+    const [selectedInstructionImageIds, setSelectedInstructionImageIds] = useState<string[]>([]);
+    const [payableAmountMode, setPayableAmountMode] = useState<PayableAmountMode>("total_payable");
     const [saving, setSaving] = useState(false);
+
+    // Image Upload State for library
+    const [newImageLabel, setNewImageLabel] = useState("");
+    const [isUploadingImg, setIsUploadingImg] = useState(false);
+    const cropper = useImageCropper(IMAGE_PRESETS.paymentInstruction);
 
     const sensors = useSensors(
         useSensor(PointerSensor),
@@ -133,12 +168,14 @@ export default function PaymentSettingsPage() {
     const loadData = useCallback(async () => {
         setLoading(true);
         try {
-            const [pms, charges] = await Promise.all([
+            const [pms, charges, images] = await Promise.all([
                 getPaymentMethodsAdmin(),
                 getChargeOptions(),
+                getPaymentInstructionImagesAction(),
             ]);
             setMethods(pms as PaymentMethodWithCharges[]);
             setAllCharges((charges || []) as ChargeOption[]);
+            setInstructionImages((images || []) as PaymentInstructionImage[]);
         } catch (error) {
             console.error("Failed to load payment methods data:", error);
             push({ title: "Error", description: "Failed to load payment settings", variant: "error" });
@@ -158,10 +195,45 @@ export default function PaymentSettingsPage() {
         setNote(pm?.note || "");
         setButtonLabel(pm?.button_label || "Place Order");
         setInstructions(pm?.instructions || "");
-        setCustomFields(pm?.custom_fields ? (pm.custom_fields as PaymentMethodCustomField[]) : []);
+        setCustomFields(parseCustomFields(pm?.custom_fields));
         setActive(pm?.is_active ?? true);
         setIsDefault(pm?.is_default ?? false);
         setSelectedChargeIds(pm ? pm.charges.map((c) => c.id) : []);
+        setSelectedInstructionImageIds(pm?.instruction_images ? pm.instruction_images.map((img) => img.id) : []);
+        setPayableAmountMode((pm?.payable_amount_mode as PayableAmountMode) || "total_payable");
+    };
+
+    const handleUploadInstructionImage = () => {
+        if (!newImageLabel.trim()) {
+            push({ title: "Label Required", description: "Enter a label for the image (e.g. Bkash Bangla QR).", variant: "error" });
+            return;
+        }
+        cropper.pick(async (croppedFile: File) => {
+            setIsUploadingImg(true);
+            try {
+                const { publicUrl } = await StorageService.uploadEntityImage('payment_instructions', croppedFile);
+                await createPaymentInstructionImageAction(newImageLabel.trim(), publicUrl);
+                setNewImageLabel("");
+                push({ title: "Uploaded", description: "Payment instruction image saved.", variant: "success" });
+                const imgs = await getPaymentInstructionImagesAction();
+                setInstructionImages(imgs as PaymentInstructionImage[]);
+            } catch (err) {
+                push({ title: "Upload Failed", description: err instanceof Error ? err.message : "Failed to upload image", variant: "error" });
+            } finally {
+                setIsUploadingImg(false);
+            }
+        });
+    };
+
+    const handleDeleteInstructionImage = async (imageId: string) => {
+        try {
+            await deletePaymentInstructionImageAction(imageId);
+            setInstructionImages((prev) => prev.filter((img) => img.id !== imageId));
+            setSelectedInstructionImageIds((prev) => prev.filter((id) => id !== imageId));
+            push({ title: "Deleted", description: "Instruction image removed", variant: "success" });
+        } catch {
+            push({ title: "Error", description: "Failed to delete image", variant: "error" });
+        }
     };
 
     const handleDragEnd = async (event: DragEndEvent) => {
@@ -191,6 +263,12 @@ export default function PaymentSettingsPage() {
         );
     };
 
+    const toggleInstructionImageSelection = (imageId: string) => {
+        setSelectedInstructionImageIds((prev) =>
+            prev.includes(imageId) ? prev.filter((id) => id !== imageId) : [...prev, imageId]
+        );
+    };
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         const cleanLabel = label.trim();
@@ -205,13 +283,29 @@ export default function PaymentSettingsPage() {
             return;
         }
 
+        // Validate custom data fields if any exist
+        for (const field of customFields) {
+            if (!field.label.trim()) {
+                push({ title: "Field label required", description: "All data collection fields must have a label.", variant: "error" });
+                return;
+            }
+        }
+
+        const cleanedCustomFields: PaymentMethodCustomField[] = customFields.map((f, idx) => ({
+            id: f.id.trim() || `field_${idx}_${Date.now()}`,
+            label: f.label.trim(),
+            placeholder: f.placeholder ? f.placeholder.trim() : "",
+            required: Boolean(f.required),
+        }));
+
         const payload = {
             label: cleanLabel,
             key: cleanKey,
             note: note.trim() || null,
             button_label: buttonLabel.trim() || "Place Order",
             instructions: instructions.trim() || null,
-            custom_fields: customFields,
+            custom_fields: cleanedCustomFields,
+            payable_amount_mode: payableAmountMode,
             is_active: active,
             is_default: isDefault,
             sort_order: currentMethod ? currentMethod.sort_order : methods.length,
@@ -220,10 +314,10 @@ export default function PaymentSettingsPage() {
         setSaving(true);
         try {
             if (currentMethod) {
-                await updatePaymentMethodAction(currentMethod.id, payload, selectedChargeIds);
+                await updatePaymentMethodAction(currentMethod.id, payload, selectedChargeIds, selectedInstructionImageIds);
                 push({ title: "Updated", description: "Payment method updated", variant: "success" });
             } else {
-                await createPaymentMethodAction(payload, selectedChargeIds);
+                await createPaymentMethodAction(payload, selectedChargeIds, selectedInstructionImageIds);
                 push({ title: "Created", description: "Payment method created", variant: "success" });
             }
             setIsDialogOpen(false);
@@ -255,7 +349,7 @@ export default function PaymentSettingsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Payment Settings</h2>
-                    <p className="text-muted-foreground">Manage payment options, customer instructions, custom fields, and linked charge profiles.</p>
+                    <p className="text-muted-foreground">Manage payment options, customer instructions, custom fields, QR images, and charge profiles.</p>
                 </div>
                 <Button
                     onClick={() => {
@@ -285,6 +379,7 @@ export default function PaymentSettingsPage() {
                                         <TableHead className="w-[50px]"></TableHead>
                                         <TableHead>Method</TableHead>
                                         <TableHead>Customer Note</TableHead>
+                                        <TableHead>Attached QR / Images</TableHead>
                                         <TableHead>Charge Profiles</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Default</TableHead>
@@ -308,6 +403,66 @@ export default function PaymentSettingsPage() {
                                 </TableBody>
                             </Table>
                         </DndContext>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Instruction Images Library Section */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Payment Instruction Images &amp; QR Codes Library</CardTitle>
+                    <CardDescription>Upload square QR codes or instruction images (e.g. Bkash Bangla QR, Nagad QR) to display on checkout steps.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-3 items-end rounded-lg border p-3 bg-muted/20">
+                        <div className="grid gap-1.5 flex-1 w-full">
+                            <Label htmlFor="imgLabel" className="text-xs font-medium">Image Label *</Label>
+                            <Input
+                                id="imgLabel"
+                                value={newImageLabel}
+                                onChange={(e) => setNewImageLabel(e.target.value)}
+                                placeholder="e.g. Bkash, Bangla QR Code"
+                                className="h-9 text-xs"
+                            />
+                        </div>
+                        <Button
+                            type="button"
+                            onClick={handleUploadInstructionImage}
+                            disabled={isUploadingImg}
+                            className="w-full sm:w-auto h-9 text-xs"
+                        >
+                            {isUploadingImg ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-3.5 w-3.5" />}
+                            Upload Image (Square Crop)
+                        </Button>
+                    </div>
+
+                    {instructionImages.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic text-center py-4">No payment instruction images uploaded yet.</p>
+                    ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                            {instructionImages.map((img) => (
+                                <div key={img.id} className="relative group rounded-md border bg-card p-2 flex flex-col items-center space-y-1.5">
+                                    <div className="relative w-full aspect-square overflow-hidden rounded-md border bg-muted/40">
+                                        <Image
+                                            src={img.url}
+                                            alt={img.label}
+                                            fill
+                                            className="object-contain"
+                                        />
+                                    </div>
+                                    <p className="text-xs font-semibold truncate w-full text-center" title={img.label}>{img.label}</p>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 w-full"
+                                        onClick={() => handleDeleteInstructionImage(img.id)}
+                                    >
+                                        <Trash2 className="mr-1 h-3 w-3" /> Delete
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </CardContent>
             </Card>
@@ -380,6 +535,71 @@ export default function PaymentSettingsPage() {
                                 minHeight={160}
                             />
                         </div>
+
+                        {/* Select Instruction Images for this method */}
+                        <div className="space-y-3 rounded-lg border p-3">
+                            <Label className="text-sm font-semibold">Attach Payment Instruction Images / QR Codes</Label>
+                            <p className="text-xs text-muted-foreground">Select images to display for this payment method on checkout (rendered in 2-column or 3-column grid).</p>
+                            {instructionImages.length === 0 ? (
+                                <p className="text-xs text-muted-foreground italic">No instruction images uploaded in the library. Upload images under Payment Instruction Images Library above.</p>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                    {instructionImages.map((img) => {
+                                        const isSelected = selectedInstructionImageIds.includes(img.id);
+                                        return (
+                                            <div
+                                                key={img.id}
+                                                onClick={() => toggleInstructionImageSelection(img.id)}
+                                                className={`relative cursor-pointer rounded-lg border p-2 flex flex-col items-center space-y-1.5 transition-all ${isSelected ? "border-primary bg-primary/10 ring-2 ring-primary/20" : "bg-muted/30 hover:bg-muted/60"
+                                                    }`}
+                                            >
+                                                <div className={`absolute top-1.5 right-1.5 z-10 flex h-4 w-4 items-center justify-center rounded border ${isSelected ? "bg-primary border-primary text-white" : "border-input bg-background"}`}>
+                                                    {isSelected && <Check className="h-3 w-3" />}
+                                                </div>
+                                                <div className="relative w-full aspect-square overflow-hidden rounded border bg-background">
+                                                    <Image src={img.url} alt={img.label} fill className="object-contain" />
+                                                </div>
+                                                <p className="text-[11px] font-medium truncate w-full text-center" title={img.label}>{img.label}</p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Payable Amount Display Setting */}
+                        {(() => {
+                            const assignedExtraCharges = allCharges.filter(
+                                (c) => selectedChargeIds.includes(c.id) && c.type !== "discount"
+                            );
+                            const extraText = assignedExtraCharges.length > 0
+                                ? assignedExtraCharges.map((c) => `${c.label} (${c.calc_type === 'percent' ? `${c.amount}%` : `$${c.amount}`})`).join(" + ")
+                                : null;
+
+                            return (
+                                <div className="space-y-2 rounded-lg border p-3">
+                                    <Label htmlFor="payableAmountMode" className="text-sm font-semibold">Payable Amount Display Setting</Label>
+                                    <p className="text-xs text-muted-foreground">Specify which calculation mode to display as the Payable Amount for this payment method.</p>
+                                    <select
+                                        id="payableAmountMode"
+                                        value={payableAmountMode}
+                                        onChange={(e) => setPayableAmountMode(e.target.value as PayableAmountMode)}
+                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    >
+                                        <option value="total_payable">Total Payable Amount (Subtotal + Additional Charges + Delivery - Discounts)</option>
+                                        <option value="subtotal">Subtotal Only (Items total raw price, excluding charges &amp; discounts)</option>
+                                        <option value="all_charges">
+                                            {extraText ? `Delivery + ${extraText}` : "Delivery + Extra Charges (No extra charges assigned)"}
+                                        </option>
+                                        <option value="delivery_charge">Only Delivery Charge</option>
+                                        <option value="extra_charges">
+                                            {extraText ? `Only Extra Charges (${extraText})` : "Only Extra Charges (No extra charges assigned)"}
+                                        </option>
+                                        <option value="none">Do Not Display Amount Banner</option>
+                                    </select>
+                                </div>
+                            );
+                        })()}
 
                         <div className="space-y-3 rounded-lg border p-3">
                             <div className="flex items-center justify-between">
@@ -538,6 +758,8 @@ export default function PaymentSettingsPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {cropper.cropperUi}
         </div>
     );
 }
