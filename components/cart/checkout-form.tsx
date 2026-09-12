@@ -49,6 +49,7 @@ export function CheckoutForm() {
 
     const [deliveryOptions, setDeliveryOptions] = useState<DeliveryOption[]>([]);
     const [selectedDelivery, setSelectedDelivery] = useState<string>("");
+    const [isLoadingDelivery, setIsLoadingDelivery] = useState(true);
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethodWithCharges[]>([]);
     const [selectedPayment, setSelectedPayment] = useState<string>("");
     const [isLoadingPayments, setIsLoadingPayments] = useState(true);
@@ -61,6 +62,7 @@ export function CheckoutForm() {
     const [pricingError, setPricingError] = useState<string | null>(null);
     const [totals, setTotals] = useState<CalculatedTotals | null>(null);
     const [isCalculating, startProcesing] = useTransition();
+    const [isDebouncingCalculation, setIsDebouncingCalculation] = useState(false);
 
     const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
     const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
@@ -132,10 +134,12 @@ export function CheckoutForm() {
         if (!cart.items.length) {
             setDeliveryOptions([]);
             setSelectedDelivery("");
+            setIsLoadingDelivery(false);
             return;
         }
 
         let cancelled = false;
+        setIsLoadingDelivery(true);
         const inputItems = cart.items.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
@@ -154,6 +158,9 @@ export function CheckoutForm() {
         }).catch(() => {
             if (cancelled) return;
             setDeliveryOptions([]);
+        }).finally(() => {
+            if (cancelled) return;
+            setIsLoadingDelivery(false);
         });
 
         return () => {
@@ -188,42 +195,50 @@ export function CheckoutForm() {
 
     // Recalculate whenever dependencies change
     useEffect(() => {
-        if (cart.items.length === 0) return;
+        if (cart.items.length === 0) {
+            setIsDebouncingCalculation(false);
+            return;
+        }
 
+        setIsDebouncingCalculation(true);
         const timer = setTimeout(() => {
             startProcesing(async () => {
-                const res = await calculateCheckout(
-                    cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
-                    selectedDelivery,
-                    appliedCoupon || undefined,
-                    selectedPayment || undefined
-                );
-                if (res.success && res.data) {
-                    setTotals(res.data as CalculatedTotals);
-                    setPricingError(null);
-                } else {
-                    if (appliedCoupon) {
-                        setCouponState({
-                            state: "error",
-                            message: res.error || "Coupon could not be applied.",
-                        });
-                        setAppliedCoupon(null);
+                try {
+                    const res = await calculateCheckout(
+                        cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
+                        selectedDelivery,
+                        appliedCoupon || undefined,
+                        selectedPayment || undefined
+                    );
+                    if (res.success && res.data) {
+                        setTotals(res.data as CalculatedTotals);
+                        setPricingError(null);
+                    } else {
+                        if (appliedCoupon) {
+                            setCouponState({
+                                state: "error",
+                                message: res.error || "Coupon could not be applied.",
+                            });
+                            setAppliedCoupon(null);
 
-                        const fallback = await calculateCheckout(
-                            cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
-                            selectedDelivery,
-                            undefined,
-                            selectedPayment || undefined
-                        );
-                        if (fallback.success && fallback.data) {
-                            setTotals(fallback.data as CalculatedTotals);
-                            setPricingError(null);
-                        } else if (fallback.error) {
-                            setPricingError(fallback.error);
+                            const fallback = await calculateCheckout(
+                                cart.items.map(i => ({ productId: i.productId, variantId: i.variantId ?? undefined, price: i.price, quantity: i.quantity })),
+                                selectedDelivery,
+                                undefined,
+                                selectedPayment || undefined
+                            );
+                            if (fallback.success && fallback.data) {
+                                setTotals(fallback.data as CalculatedTotals);
+                                setPricingError(null);
+                            } else if (fallback.error) {
+                                setPricingError(fallback.error);
+                            }
+                        } else if (res.error) {
+                            setPricingError(res.error);
                         }
-                    } else if (res.error) {
-                        setPricingError(res.error);
                     }
+                } finally {
+                    setIsDebouncingCalculation(false);
                 }
             });
         }, 500); // Debounce
@@ -392,7 +407,8 @@ export function CheckoutForm() {
         );
     }
 
-    const disabled = !ready || status.state === "submitting" || Boolean(pricingError);
+    const isCalculationLoading = isCalculating || isDebouncingCalculation || isLoadingDelivery || isLoadingPayments || (!totals && !pricingError);
+    const disabled = !ready || status.state === "submitting" || isCalculationLoading || Boolean(pricingError);
 
     return (
         <>
@@ -695,6 +711,8 @@ export function CheckoutForm() {
                             <Button type="submit" disabled={disabled || status.state === "submitting"} className="w-full text-lg h-12">
                                 {status.state === "submitting" ? (
                                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
+                                ) : isCalculationLoading ? (
+                                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Calculating...</>
                                 ) : (
                                     checkoutButtonLabel
                                 )}
@@ -813,11 +831,13 @@ export function CheckoutForm() {
                         <Button
                             type="button"
                             onClick={handleModalFinalSubmit}
-                            disabled={!isInstructionFormValid || status.state === "submitting"}
+                            disabled={!isInstructionFormValid || isCalculationLoading || status.state === "submitting"}
                             className="w-full sm:w-auto min-w-[150px]"
                         >
                             {status.state === "submitting" ? (
                                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</>
+                            ) : isCalculationLoading ? (
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Calculating...</>
                             ) : (
                                 "Place Order"
                             )}
