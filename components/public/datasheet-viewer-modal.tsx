@@ -103,41 +103,41 @@ export function DatasheetViewerModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex flex-col bg-slate-950/95 text-slate-100 backdrop-blur-md transition-all duration-200">
+        <div className="fixed inset-0 z-50 flex flex-col bg-background/95 text-foreground backdrop-blur-md transition-all duration-200">
             {/* Top Toolbar */}
-            <div className="flex h-14 shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900 px-4">
+            <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                     {fileType === "pdf" ? (
-                        <FileText className="h-5 w-5 shrink-0 text-red-400" />
+                        <FileText className="h-5 w-5 shrink-0 text-red-500" />
                     ) : (
-                        <FileImage className="h-5 w-5 shrink-0 text-emerald-400" />
+                        <FileImage className="h-5 w-5 shrink-0 text-emerald-500" />
                     )}
-                    <h3 className="truncate text-sm font-semibold text-slate-100" title={title}>
+                    <h3 className="truncate text-sm font-semibold text-foreground" title={title}>
                         {title}
                     </h3>
                 </div>
 
                 {/* Toolbar Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
+                    <div className="flex items-center rounded-md border border-border bg-muted/50 p-0.5">
                         <Button
                             type="button"
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            className="h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground"
                             onClick={handleZoomOut}
                             title="Zoom Out (-)"
                         >
                             <ZoomOut className="h-3.5 w-3.5" />
                         </Button>
-                        <span className="px-2 font-mono text-xs font-medium text-slate-200">
+                        <span className="px-2 font-mono text-xs font-medium text-foreground">
                             {Math.round(zoom * 100)}%
                         </span>
                         <Button
                             type="button"
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            className="h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground"
                             onClick={handleZoomIn}
                             title="Zoom In (+)"
                         >
@@ -147,7 +147,7 @@ export function DatasheetViewerModal({
                             type="button"
                             size="icon"
                             variant="ghost"
-                            className="h-7 w-7 text-slate-300 hover:bg-slate-700 hover:text-white"
+                            className="h-7 w-7 text-muted-foreground hover:bg-accent hover:text-foreground"
                             onClick={handleResetZoom}
                             title="Reset Zoom"
                         >
@@ -158,8 +158,8 @@ export function DatasheetViewerModal({
                     <Button
                         type="button"
                         size="sm"
-                        variant="secondary"
-                        className="h-8 gap-1.5 px-3 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                        variant="default"
+                        className="h-8 gap-1.5 px-3 text-xs"
                         onClick={handleDownload}
                     >
                         <Download className="h-3.5 w-3.5" />
@@ -170,7 +170,7 @@ export function DatasheetViewerModal({
                         type="button"
                         size="icon"
                         variant="ghost"
-                        className="h-8 w-8 text-slate-400 hover:bg-slate-800 hover:text-white"
+                        className="h-8 w-8 text-muted-foreground hover:bg-accent hover:text-foreground"
                         onClick={onClose}
                         title="Close (Esc)"
                     >
@@ -182,7 +182,7 @@ export function DatasheetViewerModal({
             {/* Viewer Body */}
             <div
                 ref={containerRef}
-                className="relative flex-1 overflow-hidden select-none cursor-grab active:cursor-grabbing"
+                className="relative flex-1 overflow-hidden select-none cursor-grab active:cursor-grabbing bg-muted/20"
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
@@ -199,7 +199,7 @@ export function DatasheetViewerModal({
                         <div className="h-full w-full p-2 sm:p-6 flex items-center justify-center">
                             <iframe
                                 src={`${fileUrl}#toolbar=0&navpanes=0`}
-                                className="h-full w-full max-w-5xl rounded-lg shadow-2xl bg-white border-0"
+                                className="h-full w-full max-w-5xl rounded-lg shadow-xl bg-background border border-border"
                                 title={title}
                             />
                         </div>
@@ -209,7 +209,7 @@ export function DatasheetViewerModal({
                             <img
                                 src={fileUrl}
                                 alt={title}
-                                className="max-h-[85vh] max-w-full object-contain rounded-md shadow-2xl"
+                                className="max-h-[85vh] max-w-full object-contain rounded-md shadow-xl border border-border"
                                 draggable={false}
                             />
                         </div>

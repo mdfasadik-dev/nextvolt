@@ -429,11 +429,8 @@ export function ProductForm({ categories, attributes, editing, isPending, onCrea
                                     if (!file) return;
                                     const title = dsTitleInput.trim() || file.name;
                                     if (file.type.startsWith("image/")) {
-                                         // Route image datasheets through existing image cropper/compression channel!
-                                         imageCropper.openWithFile(file, (croppedFile: File) => {
-                                             addDatasheet(title, croppedFile, "image");
-                                             setDsTitleInput("");
-                                         });
+                                        addDatasheet(title, file, "image");
+                                        setDsTitleInput("");
                                     } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
                                         addDatasheet(title, file, "pdf");
                                         setDsTitleInput("");

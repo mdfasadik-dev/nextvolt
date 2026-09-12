@@ -387,72 +387,83 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
             </div>
 
             {/* Description & Datasheet Tab Section */}
-            <div className="mt-8 border-t pt-4">
-                <div className="flex items-center justify-end gap-6 border-b border-border/40 pb-3 text-sm font-medium">
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('description')}
-                        className={cn(
-                            "relative py-1 transition-colors hover:text-foreground",
-                            activeTab === 'description' ? "text-foreground font-semibold" : "text-muted-foreground"
-                        )}
-                    >
-                        Description
-                        {activeTab === 'description' && (
-                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
-                        )}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('datasheet')}
-                        className={cn(
-                            "relative py-1 transition-colors hover:text-foreground",
-                            activeTab === 'datasheet' ? "text-foreground font-semibold" : "text-muted-foreground"
-                        )}
-                    >
-                        Datasheet
-                        {activeTab === 'datasheet' && (
-                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
-                        )}
-                    </button>
-                </div>
+            {(() => {
+                const hasDatasheets = Boolean(datasheets && datasheets.length > 0);
+                const currentTab = hasDatasheets ? activeTab : 'description';
 
-                {/* Tab Content */}
-                <div className="py-6">
-                    {activeTab === 'description' ? (
-                        <div className="space-y-6">
-                            {description && (
-                                <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{description}</p>
-                            )}
-                            {activeMarkdown && (
-                                <div className="prose prose-sm dark:prose-invert max-w-none">
-                                    <Markdown content={activeMarkdown} />
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="space-y-4">
-                            {datasheets && datasheets.length > 0 ? (
-                                <div className="space-y-3">
-                                    {datasheets.map((ds) => (
-                                        <div key={ds.id}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setActiveDatasheet(ds)}
-                                                className="text-left text-sm font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 underline decoration-sky-600/40 hover:decoration-sky-600 underline-offset-4 transition-colors"
-                                            >
-                                                {ds.name}
-                                            </button>
+                if (!hasDatasheets && !description && !activeMarkdown) {
+                    return null;
+                }
+
+                return (
+                    <div className="mt-8 border-t pt-4">
+                        {hasDatasheets && (
+                            <div className="flex items-center justify-end gap-6 border-b border-border/40 pb-3 text-sm font-medium">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab('description')}
+                                    className={cn(
+                                        "relative py-1 transition-colors hover:text-foreground",
+                                        currentTab === 'description' ? "text-foreground font-semibold" : "text-muted-foreground"
+                                    )}
+                                >
+                                    Description
+                                    {currentTab === 'description' && (
+                                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab('datasheet')}
+                                    className={cn(
+                                        "relative py-1 transition-colors hover:text-foreground",
+                                        currentTab === 'datasheet' ? "text-foreground font-semibold" : "text-muted-foreground"
+                                    )}
+                                >
+                                    Datasheet
+                                    {currentTab === 'datasheet' && (
+                                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500 rounded-full" />
+                                    )}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Tab Content */}
+                        <div className="py-6">
+                            {currentTab === 'description' ? (
+                                <div className="space-y-6">
+                                    {description && (
+                                        <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{description}</p>
+                                    )}
+                                    {activeMarkdown && (
+                                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                                            <Markdown content={activeMarkdown} />
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             ) : (
-                                <p className="text-sm text-muted-foreground italic">No datasheets available for this product.</p>
+                                <div className="space-y-4">
+                                    {datasheets && datasheets.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {datasheets.map((ds) => (
+                                                <div key={ds.id}>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setActiveDatasheet(ds)}
+                                                        className="text-left text-sm font-medium text-sky-600 hover:text-sky-700 dark:text-sky-400 underline decoration-sky-600/40 hover:decoration-sky-600 underline-offset-4 transition-colors"
+                                                    >
+                                                        {ds.name}
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
                             )}
                         </div>
-                    )}
-                </div>
-            </div>
+                    </div>
+                );
+            })()}
 
             {/* Datasheet Viewer Modal */}
             {activeDatasheet && (
