@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { UIProviders } from "@/components/providers/ui-providers";
 import { SEO_CONFIG, absoluteUrl } from "@/lib/seo";
 import { GoogleAnalyticsProvider } from "@/components/analytics/google-analytics-provider";
+import { MetaPixelProvider } from "@/components/analytics/meta-pixel-provider";
 
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
 
@@ -74,6 +75,7 @@ export default function RootLayout({
         >
           <UIProviders>{children}</UIProviders>
           <GoogleAnalyticsProvider />
+          <MetaPixelProvider />
         </ThemeProvider>
       </body>
     </html>
