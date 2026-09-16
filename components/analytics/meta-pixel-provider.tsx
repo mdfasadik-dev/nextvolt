@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Script from "next/script";
 import { useEffect, useRef, Suspense } from "react";
 import {
@@ -11,16 +11,23 @@ import {
 
 function MetaPixelTracker() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const isFirstRender = useRef(true);
+  const lastPathname = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
+    if (!pathname) return;
+
+    if (lastPathname.current === null) {
+      // First render: initial PageView is already fired by the inline script
+      lastPathname.current = pathname;
       return;
     }
-    pageview();
-  }, [pathname, searchParams]);
+
+    // Only fire PageView when the pathname actually changes to a new route
+    if (lastPathname.current !== pathname) {
+      lastPathname.current = pathname;
+      pageview();
+    }
+  }, [pathname]);
 
   return null;
 }
@@ -45,6 +52,7 @@ export function MetaPixelProvider() {
             t.src=v;s=b.getElementsByTagName(e)[0];
             s.parentNode.insertBefore(t,s)}(window, document,'script',
             'https://connect.facebook.net/en_US/fbevents.js');
+            fbq('set', 'autoConfig', false, '${META_PIXEL_ID}');
             fbq('init', '${META_PIXEL_ID}');
             fbq('track', 'PageView');
           `,
