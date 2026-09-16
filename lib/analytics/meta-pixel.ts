@@ -27,3 +27,99 @@ export const customEvent = (name: string, options: Record<string, unknown> = {})
     window.fbq("trackCustom", name, options);
   }
 };
+
+export interface MetaViewContentParams {
+  content_ids: string[];
+  content_name?: string;
+  content_type?: string;
+  value: number;
+  currency?: string;
+}
+
+export const trackViewContent = ({
+  content_ids,
+  content_name,
+  content_type = "product",
+  value,
+  currency = "BDT",
+}: MetaViewContentParams) => {
+  event("ViewContent", {
+    content_ids,
+    ...(content_name ? { content_name } : {}),
+    content_type,
+    value,
+    currency,
+  });
+};
+
+export interface MetaAddToCartParams {
+  content_ids: string[];
+  content_name?: string;
+  content_type?: string;
+  value: number;
+  currency?: string;
+}
+
+export const trackAddToCart = ({
+  content_ids,
+  content_name,
+  content_type = "product",
+  value,
+  currency = "BDT",
+}: MetaAddToCartParams) => {
+  event("AddToCart", {
+    content_ids,
+    ...(content_name ? { content_name } : {}),
+    content_type,
+    value,
+    currency,
+  });
+};
+
+export interface MetaInitiateCheckoutParams {
+  content_ids: string[];
+  content_type?: string;
+  value: number;
+  currency?: string;
+  num_items?: number;
+}
+
+export const trackInitiateCheckout = ({
+  content_ids,
+  content_type = "product",
+  value,
+  currency = "BDT",
+  num_items,
+}: MetaInitiateCheckoutParams) => {
+  event("InitiateCheckout", {
+    content_ids,
+    content_type,
+    value,
+    currency,
+    ...(typeof num_items === "number" ? { num_items } : {}),
+  });
+};
+
+export interface MetaPurchaseParams {
+  content_ids: string[];
+  content_type?: string;
+  value: number;
+  currency?: string;
+  num_items?: number;
+}
+
+export const trackPurchase = ({
+  content_ids,
+  content_type = "product",
+  value,
+  currency = "BDT",
+  num_items,
+}: MetaPurchaseParams) => {
+  event("Purchase", {
+    content_ids,
+    content_type,
+    value,
+    currency,
+    ...(typeof num_items === "number" ? { num_items } : {}),
+  });
+};

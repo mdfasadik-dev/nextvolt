@@ -1,19 +1,20 @@
 "use client";
 
-import { FormEvent, useEffect, useState, useTransition } from "react";
+import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { AlertCircle, Info, Loader2, Tag } from "lucide-react";
+import { AlertCircle, Loader2, Tag } from "lucide-react";
 import { useCart } from "./cart-provider";
 import { useCustomerStorage } from "./use-customer-storage";
+import { trackInitiateCheckout } from "@/lib/analytics/meta-pixel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { calculateCheckout, getCheckoutDeliveryOptionsForItems, getCheckoutPaymentMethods } from "@/app/(public)/checkout/actions";
 import { CalculatedTotals } from "@/lib/services/checkoutService";
-import { PaymentMethodWithCharges, PaymentMethodCustomField, parseCustomFields } from "@/lib/types/payment-method";
+import { PaymentMethodWithCharges, parseCustomFields } from "@/lib/types/payment-method";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_CURRENCY_CODE } from "@/lib/constants/currency";
 import { Markdown } from "@/components/markdown";
@@ -66,6 +67,19 @@ export function CheckoutForm() {
 
     const [isInstructionModalOpen, setIsInstructionModalOpen] = useState(false);
     const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+
+    const hasFiredInitiateCheckout = useRef(false);
+    useEffect(() => {
+        if (!cart.isReady || cart.items.length === 0 || hasFiredInitiateCheckout.current) return;
+        hasFiredInitiateCheckout.current = true;
+        trackInitiateCheckout({
+            content_ids: cart.items.map((i) => i.productId),
+            content_type: "product",
+            value: Number(cart.subtotal.toFixed(2)),
+            currency: "BDT",
+            num_items: cart.itemCount,
+        });
+    }, [cart.isReady, cart.items, cart.subtotal, cart.itemCount]);
 
     const symbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || "$";
     const currencyCode = DEFAULT_CURRENCY_CODE;

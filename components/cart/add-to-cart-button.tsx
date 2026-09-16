@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCart } from "./cart-provider";
 import { useToast } from "@/components/ui/toast-provider";
+import { trackAddToCart } from "@/lib/analytics/meta-pixel";
 
 export interface AddToCartButtonProps extends ComponentProps<typeof Button> {
     productId: string;
@@ -60,6 +61,13 @@ export const AddToCartButton = forwardRef<HTMLButtonElement, AddToCartButtonProp
             },
             quantity,
         );
+        trackAddToCart({
+            content_ids: [productId],
+            content_name: productName,
+            content_type: "product",
+            value: Number((price * quantity).toFixed(2)),
+            currency: "BDT",
+        });
         toast.push({ variant: "success", title: "Added to cart", description: `${productName} has been added to your cart.` })
     };
 

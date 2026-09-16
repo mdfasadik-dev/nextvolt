@@ -1,13 +1,14 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { ArrowRight, CheckCircle2, CreditCard, MapPin, Package, Printer, Truck } from "lucide-react";
+import { ArrowRight, CheckCircle2, CreditCard, MapPin, Package, Printer } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { WhatsAppIcon } from "@/components/icons/whatsapp-icon";
+import { trackPurchase } from "@/lib/analytics/meta-pixel";
 import type { OrderDetail } from "@/lib/services/orderService";
 import type { OrderStatus } from "@/lib/constants/order-status";
 
@@ -38,6 +39,39 @@ export function ConfirmationClient({
 }) {
     const printRef = useRef<HTMLDivElement>(null);
     const isTrackMode = mode === "track";
+
+    useEffect(() => {
+        if (mode !== "placed") return;
+        const storageKey = `meta_pixel_purchase_${order.id}`;
+        try {
+            const alreadyTracked =
+                window.sessionStorage.getItem(storageKey) ||
+                window.localStorage.getItem(storageKey);
+            if (alreadyTracked) return;
+
+            window.sessionStorage.setItem(storageKey, "1");
+            window.localStorage.setItem(storageKey, "1");
+        } catch {
+            // ignore storage access issues
+        }
+
+        const productIds = order.items
+            .map((item) => item.productId)
+            .filter((id): id is string => Boolean(id));
+
+        const totalItemsCount = order.items.reduce(
+            (sum, item) => sum + (item.quantity || 1),
+            0
+        );
+
+        trackPurchase({
+            content_ids: productIds,
+            content_type: "product",
+            value: Number(order.totalAmount.toFixed(2)),
+            currency: "BDT",
+            num_items: totalItemsCount,
+        });
+    }, [order.id, order.totalAmount, order.items, mode]);
     const statusLabel = STATUS_LABELS[order.status] || order.status;
     const whatsappDigits = (supportPhone || "").replace(/[^0-9]/g, "");
     const hasWhatsappSupport = whatsappDigits.length >= 8;

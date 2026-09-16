@@ -5,11 +5,12 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Markdown } from '@/components/markdown';
-import { FileImage, FileText } from 'lucide-react';
+import { FileImage } from 'lucide-react';
 import { AddToCartButton } from '@/components/cart/add-to-cart-button';
 import { ProductBadgePill } from '@/components/products/product-badge-pill';
 import { DatasheetViewerModal } from '@/components/public/datasheet-viewer-modal';
 import { WhatsAppIcon } from '@/components/icons/whatsapp-icon';
+import { trackViewContent } from '@/lib/analytics/meta-pixel';
 
 interface VariantItem { id: string; title: string | null; sku: string | null; image_url: string | null; minPrice: number | null; maxPrice: number | null; minOriginalPrice?: number | null; maxOriginalPrice?: number | null; totalQty?: number | null; unit?: string | null; details_md?: string | null }
 
@@ -172,6 +173,18 @@ export default function ProductDetailClient({ productId, productSlug, basePrice,
         : basePriceValue ?? null;
     const cartVariantName = cartVariant ? (cartVariant.title || cartVariant.sku || cartVariant.id) : null;
     const canAddToCart = !isOutOfStock && cartPrice != null && (!hasVariants || cartVariant != null);
+
+    useEffect(() => {
+        const val = cartPrice ?? basePriceValue ?? 0;
+        trackViewContent({
+            content_ids: [productId],
+            content_name: productName,
+            content_type: "product",
+            value: Number(val.toFixed(2)),
+            currency: "BDT",
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [productId]);
 
     const discountPercent = useMemo(() => {
         if (activeVariant) {
